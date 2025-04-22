@@ -1,0 +1,6 @@
+.git\
+.venv\
+*.log
+current_requirements.txt
+.cursorrules
+Github\ 
