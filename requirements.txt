@@ -1,21 +1,34 @@
-# BibAI Filter Dependencies
+# Core packages
+PyQt5
+pandas>=2.0.3
+numpy>=1.24.3
+openpyxl>=3.1.2
+xlrd>=2.0.1
+xlwt>=1.3.0
+tqdm>=4.66.1
+requests>=2.31.0
+PyYAML>=6.0.1
 
-# Core dependencies
-pandas>=1.3.0        # Excel file processing and data manipulation
-PyQt5>=5.15.0        # GUI framework
-openpyxl>=3.0.0      # Required by pandas for .xlsx files
-xlrd>=2.0.0          # Required by pandas for .xls files
-requests>=2.25.0     # HTTP requests
+# AI API packages
+openai>=1.7.0
+anthropic>=0.9.0
+google-genai>=1.0.0
+httpx>=0.25.0
 
-# AI Provider Libraries
-openai>=1.0.0        # OpenAI API (GPT models)
-anthropic>=0.4.0     # Anthropic API (Claude models)
-google-generativeai>=0.3.0  # Google Generative AI (Gemini models)
+# Utility packages
+python-dateutil>=2.8.2
+pytz>=2023.3
+colorama>=0.4.6
 
-# Optional AI provider dependencies
-deepseek>=1.0.0      # DeepSeek AI models
-mistralai>=0.0.1     # Mistral AI models
-cohere>=4.0.0        # Cohere AI models
+# UI Enhancements
+QScintilla==2.13.3
+pyqtgraph==0.13.3
 
-# Logging and configuration
-python-dotenv>=0.19.0  # Environment variable management
+# Development & Testing
+pytest==7.4.0
+flake8==6.1.0
+black==23.7.0
+
+# Documentation
+sphinx==7.1.2
+sphinx-rtd-theme==1.3.0 

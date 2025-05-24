@@ -95,12 +95,27 @@ class AIProcessor:
                             "base_url": "https://generativelanguage.googleapis.com",
                             "active_model": "gemini-1.5-flash",
                             "models": [
-                                "gemini-2.5-pro-exp-03-25",
-                                "gemini-2.0-flash-thinking-exp-1219",
-                                "gemini-1.5-pro", 
-                                "gemini-1.5-flash", 
-                                "gemini-pro",
-                                "gemini-pro-vision"
+                                # 2.5 Series - Preview/Experimental
+                                "gemini-2.5-flash-preview-05-20",
+                                "gemini-2.5-flash-preview-native-audio-dialog",
+                                "gemini-2.5-flash-exp-native-audio-thinking-dialog",
+                                "gemini-2.5-flash-preview-tts",
+                                "gemini-2.5-pro-preview-05-06",
+                                "gemini-2.5-pro-preview-tts",
+                                # 2.0 Series - Stable
+                                "gemini-2.0-flash",
+                                "gemini-2.0-flash-preview-image-generation",
+                                "gemini-2.0-flash-lite",
+                                # 1.5 Series - Stable
+                                "gemini-1.5-flash",
+                                "gemini-1.5-flash-8b",
+                                "gemini-1.5-pro",
+                                # Embedding Models
+                                "gemini-embedding-exp",
+                                "text-embedding-004",
+                                "embedding-001",
+                                # Special Models
+                                "aqa"
                             ]
                         },
                         "deepseek": {
@@ -294,24 +309,21 @@ class AIProcessor:
                 return False
         elif self.provider == "google":
             try:
-                # Import Google Generative AI library as shown in the official documentation
+                # Import yeni Google Gen AI SDK
                 from google import genai
+                from google.genai import types
 
-                # Initialize the client as shown in the documentation
+                # Yeni client oluşturma yöntemi
                 self.google_client = genai.Client(api_key=self.api_key)
 
-                logger.info(f"Google Generative AI client created using the official import method.")
+                logger.info(f"Google Gen AI client created successfully with new SDK.")
                 return True
             except ImportError as ie:
-                logger.error(f"Import error for Google Generative AI: {str(ie)}. Check if 'google-generativeai' is installed correctly.")
-                self.google_client = None
-                return False
-            except AttributeError as ae:
-                logger.error(f"Attribute error initializing Google Generative AI client: {str(ae)}")
+                logger.error(f"Import error for Google Gen AI: {str(ie)}. Check if 'google-genai' is installed correctly.")
                 self.google_client = None
                 return False
             except Exception as e:
-                logger.error(f"Error initializing Google Generative AI client: {str(e)}")
+                logger.error(f"Error initializing Google Gen AI client: {str(e)}")
                 self.google_client = None
                 return False
         elif self.provider == "openai":
@@ -493,25 +505,25 @@ class AIProcessor:
                     return False
                     
             elif self.provider == "google":
-                # Use the client directly instead of REST API
+                # Yeni Google Gen AI SDK ile client kullanımı
                 try:
-                    # First initialize the client if needed
+                    # Önce client'ın başlatıldığından emin ol
                     if not self.google_client:
                         if not self._initialize_client():
                             logger.error("Google client could not be initialized.")
                             return False
                     
-                    logger.info(f"Testing connection with Google Gemini API client using model: {self.model}")
+                    logger.info(f"Testing connection with Google Gen AI API using model: {self.model}")
                     
-                    # Call API using client.models.generate_content as shown in documentation
+                    # Yeni API call formatı
                     response = self.google_client.models.generate_content(
                         model=self.model,
-                        contents=["Hello, testing the connection."]
+                        contents="Hello, testing the connection."
                     )
                     
                     # Check response
                     logger.debug(f"Google API test response: {response}")
-                    if hasattr(response, 'text'):
+                    if hasattr(response, 'text') and response.text:
                         result_text = response.text.strip()
                         logger.info(f"Google API connection test successful: {result_text}")
                         return True
@@ -522,58 +534,22 @@ class AIProcessor:
                 except Exception as e:
                     logger.error(f"Google API test failed: {str(e)}")
                     
-                    # If client test fails, try the REST API as fallback
-                    try:
-                        logger.info("Falling back to REST API for Google connection test")
-                        headers = {
-                            "Content-Type": "application/json"
-                        }
-                        
-                        # Use a reliable model for testing
-                        model_name = "gemini-1.5-flash"
-                        
-                        # API call as per documentation
-                        url = f"{self.base_url}/v1/models/{model_name}:generateContent?key={self.api_key}"
-                        
-                        # Simple request body
-                        data = {
-                            "contents": [
-                                {
-                                    "parts": [{"text": "Hello, testing the connection."}]
-                                }
-                            ],
-                            "generationConfig": {"maxOutputTokens": 5}
-                        }
-                        
-                        response = requests.post(
-                            url,
-                            headers=headers,
-                            json=data,
-                            timeout=self.timeout
-                        )
-                        
-                        if response.status_code == 200:
-                            logger.info(f"Google API REST connection test successful")
-                            return True
-                        
-                        # Try v1beta if v1 fails
-                        elif response.status_code == 404 and "/v1/" in url:
-                            url = url.replace("/v1/", "/v1beta/")
-                            response = requests.post(
-                                url,
-                                headers=headers,
-                                json=data,
-                                timeout=self.timeout
+                    # Model bulunamazsa varsayılan modeli dene
+                    if "model" in str(e).lower() and "not found" in str(e).lower():
+                        logger.warning(f"Model {self.model} not found, trying with gemini-1.5-flash")
+                        try:
+                            self.model = "gemini-1.5-flash"
+                            response = self.google_client.models.generate_content(
+                                model="gemini-1.5-flash",
+                                contents="Hello, testing the connection."
                             )
-                            if response.status_code == 200:
-                                logger.info(f"Google API v1beta connection test successful")
+                            if hasattr(response, 'text') and response.text:
+                                logger.info(f"Google API connection test successful with fallback model")
                                 return True
-                        
-                        logger.warning(f"Google API connection test failed: {response.status_code} - {response.text}")
-                        return False
-                    except Exception as rest_error:
-                        logger.error(f"Google API REST test failed: {str(rest_error)}")
-                        return False
+                        except Exception as fallback_error:
+                            logger.error(f"Fallback model test failed: {str(fallback_error)}")
+                    
+                    return False
             elif self.provider == "deepseek":
                 # DeepSeek API test
                 try:
@@ -1086,6 +1062,9 @@ class AIProcessor:
     
     def _get_score_anthropic(self, system_message, user_message):
         """Get relevance score using Anthropic API"""
+        # Sistem ve kullanıcı mesajlarını birleştir
+        custom_prompt = f"{system_message}\n\n{user_message}"
+        
         while True:
             try:
                 # Modern Anthropic kütüphanesi ile dene
@@ -1168,19 +1147,19 @@ class AIProcessor:
                 continue # Retry loop
     
     def _get_score_google(self, system_message, user_message):
-        """Get relevance score using Google Gemini API (PyPI Client Example)"""
+        """Get relevance score using Google Gen AI API"""
         try:
             if not self.google_client:
                 if not self._initialize_client():
                      logger.error("Google client could not be initialized.")
                      return 4
 
-            # Combine system and user message
+            # Sistem ve kullanıcı mesajlarını birleştir
             combined_message = f"{system_message}\n\n{user_message}\n\nIMPORTANT: You MUST respond with ONLY a single digit from 1 to 7 representing the relevance score. No other text is allowed."
 
-            logger.info(f"Sending query to Google Gemini API via client.models: {self.model}")
+            logger.info(f"Sending query to Google Gen AI API: {self.model}")
 
-            # Call API using the client.models.generate_content method as shown in documentation
+            # Yeni API call formatı
             response = self.google_client.models.generate_content(
                 model=self.model,
                 contents=combined_message
@@ -1188,26 +1167,20 @@ class AIProcessor:
 
             # Process response
             logger.debug(f"Full Google API response: {response}")
-            if hasattr(response, 'text'):
+            if hasattr(response, 'text') and response.text:
                 result_text = response.text.strip()
                 logger.info(f"Google response: {result_text}")
                 return self._parse_result(result_text)
             else:
                 logger.warning(f"Unexpected Google API response format or no text: {response}")
+                # Safety feedback kontrolü (eski format uyumluluğu)
                 if hasattr(response, 'prompt_feedback') and response.prompt_feedback and hasattr(response.prompt_feedback, 'block_reason'):
                     logger.warning(f"Request blocked: {response.prompt_feedback.block_reason}")
-                return 4 # Default score
+                return 4  # Default score
 
-        except AttributeError as ae:
-            # Check for different attribute errors based on the updated API
-            if "'models'" in str(ae):
-                logger.error(f"Error calling Google API: Client object has no attribute 'models'. Client type: {type(self.google_client)}")
-            else:
-                logger.error(f"Attribute error during Google API call: {str(ae)}")
-            return 4
         except Exception as e:
             logger.error(f"Error with Google API call: {str(e)}")
-            if "400" in str(e) and "model" in str(e).lower() and "not found" in str(e).lower():
+            if "model" in str(e).lower() and "not found" in str(e).lower():
                 logger.warning(f"Model {self.model} not found, falling back to gemini-1.5-flash")
                 self.model = "gemini-1.5-flash"
             return 4
@@ -1875,7 +1848,7 @@ class AIProcessor:
                 continue # Retry loop
     
     def _get_score_with_prompt_google(self, custom_prompt):
-        """Get relevance score using Google API with custom prompt"""
+        """Get relevance score using Google Gen AI API with custom prompt"""
         try:
             if not self.google_client:
                 if not self._initialize_client():
@@ -1883,29 +1856,30 @@ class AIProcessor:
                      return 4
 
             # Log and send the query
-            logger.info(f"Sending custom prompt to Google Gemini API: {self.model}")
+            logger.info(f"Sending custom prompt to Google Gen AI API: {self.model}")
             
-            # Call API using client.models.generate_content method as shown in documentation
+            # Yeni API call formatı
             response = self.google_client.models.generate_content(
                 model=self.model,
-                contents=[custom_prompt]
+                contents=custom_prompt
             )
             
             # Process response
             logger.debug(f"Full Google API response: {response}")
-            if hasattr(response, 'text'):
+            if hasattr(response, 'text') and response.text:
                 result_text = response.text.strip()
                 logger.info(f"Google response: {result_text}")
                 return self._parse_result(result_text)
             else:
                 logger.warning(f"Unexpected Google API response format or no text: {response}")
+                # Safety feedback kontrolü (eski format uyumluluğu)
                 if hasattr(response, 'prompt_feedback') and response.prompt_feedback and hasattr(response.prompt_feedback, 'block_reason'):
                     logger.warning(f"Request blocked: {response.prompt_feedback.block_reason}")
                 return 4  # Default score
                 
         except Exception as e:
             logger.error(f"Error with Google API call: {str(e)}")
-            if "400" in str(e) and "model" in str(e).lower() and "not found" in str(e).lower():
+            if "model" in str(e).lower() and "not found" in str(e).lower():
                  logger.warning(f"Model {self.model} not found for custom prompt, falling back to gemini-1.5-flash")
                  self.model = "gemini-1.5-flash"
             return 4
@@ -2275,6 +2249,8 @@ class AIProcessor:
             
             # Anthropic modelleri
             anthropic_models = [
+                "claude-opus-4-20250514",
+                "claude-sonnet-4-20250514",
                 "claude-3-7-sonnet-20250219",
                 "claude-3-5-sonnet-20241022",
                 "claude-3-5-haiku-20241022",
@@ -2283,14 +2259,29 @@ class AIProcessor:
                 "claude-3-opus-20240229"
             ]
             
-            # Google modelleri
+            # Google modelleri - Gen AI SDK ile uyumlu modeller
             google_models = [
-                "gemini-2.5-pro-exp-03-25",
-                "gemini-2.0-flash-thinking-exp-1219",
-                "gemini-1.5-pro", 
-                "gemini-1.5-flash", 
-                "gemini-pro",
-                "gemini-pro-vision"
+                # 2.5 Series - Preview/Experimental
+                "gemini-2.5-flash-preview-05-20",
+                "gemini-2.5-flash-preview-native-audio-dialog",
+                "gemini-2.5-flash-exp-native-audio-thinking-dialog",
+                "gemini-2.5-flash-preview-tts",
+                "gemini-2.5-pro-preview-05-06",
+                "gemini-2.5-pro-preview-tts",
+                # 2.0 Series - Stable
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-preview-image-generation",
+                "gemini-2.0-flash-lite",
+                # 1.5 Series - Stable
+                "gemini-1.5-flash",
+                "gemini-1.5-flash-8b",
+                "gemini-1.5-pro",
+                # Embedding Models
+                "gemini-embedding-exp",
+                "text-embedding-004",
+                "embedding-001",
+                # Special Models
+                "aqa"
             ]
             
             # DeepSeek modelleri
