@@ -28,10 +28,11 @@ BibAI Filter is a sophisticated desktop application designed for researchers and
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/yourusername/BibAIFilter.git
-   cd BibAIFilter
+   git clone https://github.com/bcankara/BibAIFilter.git
    ```
-
+    ```bash
+    cd BibAIFilter
+    ```
 2. **Create a Virtual Environment (Recommended)**
    ```bash
    python -m venv .venv
