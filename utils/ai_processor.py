@@ -7,11 +7,7 @@ import logging
 import time
 import re  # Regular expression modülünü ekle
 import requests
-from pathlib import Path
-from datetime import datetime
 from openai import OpenAI  # Yeni OpenAI import
-# Google Güvenlik Ayarları için Enumları import et
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 logger = logging.getLogger(__name__)
 
@@ -58,113 +54,15 @@ class AIProcessor:
                     return json.load(f)
             else:
                 logger.warning(f"Config file not found: {self.config_file}")
-                # Return default config
+                # Return minimal config - setup dialog will handle provider configuration
                 return {
                     "activeProvider": "openai",
-                    "providers": {
-                        "openai": {
-                            "api_key": "",
-                            "base_url": "",
-                            "active_model": "gpt-4.1",  # Set new active model
-                            "models": [
-                                "gpt-4.1",
-                                "gpt-4.1-mini",
-                                "gpt-4.1-nano",
-                                "o1",
-                                "o1-mini",
-                                "o3-mini",
-                                "o1-pro"
-                            ]
-                        },
-                        "anthropic": {
-                            "api_key": "",
-                            "base_url": "https://api.anthropic.com",
-                            "active_model": "claude-3-7-sonnet-20250219",
-                            "models": [
-                                "claude-3-7-sonnet-20250219",
-                                "claude-3-5-sonnet-20241022",
-                                "claude-3-5-haiku-20241022",
-                                "claude-3-5-sonnet-20240620",
-                                "claude-3-haiku-20240307",
-                                "claude-3-opus-20240229"
-                                # Removed older claude-3-haiku and sonnet without dates
-                            ]
-                        },
-                        "google": {
-                            "api_key": "",
-                            "base_url": "https://generativelanguage.googleapis.com",
-                            "active_model": "gemini-1.5-flash",
-                            "models": [
-                                # 2.5 Series - Preview/Experimental
-                                "gemini-2.5-flash-preview-05-20",
-                                "gemini-2.5-flash-preview-native-audio-dialog",
-                                "gemini-2.5-flash-exp-native-audio-thinking-dialog",
-                                "gemini-2.5-flash-preview-tts",
-                                "gemini-2.5-pro-preview-05-06",
-                                "gemini-2.5-pro-preview-tts",
-                                # 2.0 Series - Stable
-                                "gemini-2.0-flash",
-                                "gemini-2.0-flash-preview-image-generation",
-                                "gemini-2.0-flash-lite",
-                                # 1.5 Series - Stable
-                                "gemini-1.5-flash",
-                                "gemini-1.5-flash-8b",
-                                "gemini-1.5-pro",
-                                # Embedding Models
-                                "gemini-embedding-exp",
-                                "text-embedding-004",
-                                "embedding-001",
-                                # Special Models
-                                "aqa"
-                            ]
-                        },
-                        "deepseek": {
-                            "api_key": "",
-                            "base_url": "https://api.deepseek.com",
-                            "active_model": "deepseek-chat",
-                            "models": [
-                                "deepseek-reasoner",
-                                "deepseek-chat", 
-                                "deepseek-coder",
-                                "deepseek-llm-67b-chat"
-                            ]
-                        },
-                        "mistral": {
-                            "api_key": "",
-                            "base_url": "https://api.mistral.ai",
-                            "active_model": "mistral-large-latest",
-                            "models": [
-                                "mistral-large-latest",
-                                "mistral-medium-latest", 
-                                "mistral-small-latest",
-                                "open-mistral-7b"
-                            ]
-                        },
-                        "cohere": {
-                            "api_key": "",
-                            "base_url": "https://api.cohere.ai",
-                            "active_model": "command-r-plus",
-                            "models": [
-                                "command-r-plus",
-                                "command-r", 
-                                "command-light"
-                            ]
-                        },
-                        "azure-openai": {
-                            "api_key": "",
-                            "base_url": "", 
-                            "active_model": "gpt-4",
-                            "models": [
-                                "gpt-4",
-                                "gpt-4-turbo",
-                                "gpt-35-turbo"
-                            ],
-                            "api_version": "2024-02-15-preview"
-                        }
-                    },
+                    "providers": {},
                     "settings": {
                         "temperature": 0.2,
-                        "timeout": 30
+                        "timeout": 30,
+                        "record_requests": False,
+                        "verbose_logging": False
                     }
                 }
         except Exception as e:
@@ -2234,80 +2132,51 @@ class AIProcessor:
             # Hata durumunda varsayılan modellere geri dön
 
     def _update_provider_models(self):
-        """Mevcut modellerin listesini günceller"""
+        """Mevcut modellerin listesini günceller - Son 3 model ile sınırlı"""
         try:
-            # OpenAI modelleri - 4.1 ve reasoning modelleri
+            # OpenAI modelleri - En son 3 model (2025 güncellemesi)
             openai_models = [
-                "gpt-4.1",
-                "gpt-4.1-mini",
-                "gpt-4.1-nano",
-                "o1",
-                "o1-mini",
                 "o3-mini",
-                "o1-pro"
+                "gpt-4.1", 
+                "o4-mini"
             ]
             
-            # Anthropic modelleri
+            # Anthropic modelleri - En son 3 model (2025 güncellemesi)
             anthropic_models = [
-                "claude-opus-4-20250514",
-                "claude-sonnet-4-20250514",
-                "claude-3-7-sonnet-20250219",
-                "claude-3-5-sonnet-20241022",
-                "claude-3-5-haiku-20241022",
-                "claude-3-5-sonnet-20240620",
-                "claude-3-haiku-20240307",
-                "claude-3-opus-20240229"
+                "claude-4-sonnet",
+                "claude-3-7-sonnet",
+                "claude-4-opus"
             ]
             
-            # Google modelleri - Gen AI SDK ile uyumlu modeller
+            # Google modelleri - En son 3 model (2025 güncellemesi)
             google_models = [
-                # 2.5 Series - Preview/Experimental
-                "gemini-2.5-flash-preview-05-20",
-                "gemini-2.5-flash-preview-native-audio-dialog",
-                "gemini-2.5-flash-exp-native-audio-thinking-dialog",
-                "gemini-2.5-flash-preview-tts",
-                "gemini-2.5-pro-preview-05-06",
-                "gemini-2.5-pro-preview-tts",
-                # 2.0 Series - Stable
-                "gemini-2.0-flash",
-                "gemini-2.0-flash-preview-image-generation",
-                "gemini-2.0-flash-lite",
-                # 1.5 Series - Stable
-                "gemini-1.5-flash",
-                "gemini-1.5-flash-8b",
-                "gemini-1.5-pro",
-                # Embedding Models
-                "gemini-embedding-exp",
-                "text-embedding-004",
-                "embedding-001",
-                # Special Models
-                "aqa"
+                "gemini-2.5-pro",
+                "gemini-2.5-flash",
+                "gemini-2.0-flash"
             ]
             
-            # DeepSeek modelleri
+            # DeepSeek modelleri - En son 3 model
             deepseek_models = [
                 "deepseek-reasoner",
-                "deepseek-chat", 
-                "deepseek-coder",
-                "deepseek-llm-67b-chat"
+                "deepseek-r1",
+                "deepseek-chat"
             ]
             
-            # Mistral modelleri
+            # Mistral modelleri - En son 3 model
             mistral_models = [
                 "mistral-large-latest",
-                "mistral-medium-latest", 
-                "mistral-small-latest",
-                "open-mistral-7b"
+                "mistral-medium-latest",
+                "codestral-2501"
             ]
             
-            # Cohere modelleri
+            # Cohere modelleri - En son 3 model
             cohere_models = [
                 "command-r-plus",
-                "command-r", 
-                "command-light"
+                "command-a",
+                "command-r"
             ]
             
-            # Azure OpenAI modelleri
+            # Azure OpenAI modelleri - Son 3 model korundu
             azure_openai_models = [
                 "gpt-4",
                 "gpt-4-turbo",
