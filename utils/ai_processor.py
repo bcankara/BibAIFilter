@@ -6,7 +6,6 @@ import json
 import logging
 import time
 import re  # Regular expression modülünü ekle
-import requests
 from openai import OpenAI  # Yeni OpenAI import
 
 logger = logging.getLogger(__name__)
@@ -23,6 +22,7 @@ class AIProcessor:
         self.openai_client = None
         self.anthropic_client = None
         self.google_client = None
+        self.deepseek_client = None
         
         # Load configuration
         self.config = self._load_config()
@@ -83,20 +83,22 @@ class AIProcessor:
             if "providers" not in self.config:
                 self.config["providers"] = {}
                 
-            # Ensure all providers exist in config
-            providers = ["openai", "anthropic", "google", "deepseek", "mistral", "cohere", "azure-openai"]
+            # Ensure all providers exist in config (Nisan 2026 güncellemesi)
+            providers = ["openai", "anthropic", "google", "deepseek"]
             for provider in providers:
                 if provider not in self.config["providers"]:
+                    default_base = ""
+                    if provider == "deepseek":
+                        default_base = "https://api.deepseek.com"
                     self.config["providers"][provider] = {
                         "api_key": "",
-                        "base_url": "",
+                        "base_url": default_base,
                         "active_model": "",
                         "models": []
                     }
-                    
-                    # Azure OpenAI için ek parametreler
-                    if provider == "azure-openai":
-                        self.config["providers"][provider]["api_version"] = "2024-02-15-preview"
+                # Mevcut deepseek bloğunda base_url boşsa varsayılanı yaz.
+                if provider == "deepseek" and not self.config["providers"][provider].get("base_url"):
+                    self.config["providers"][provider]["base_url"] = "https://api.deepseek.com"
             
             # Update current provider settings
             prov_config = self.config["providers"][self.provider]
@@ -188,6 +190,26 @@ class AIProcessor:
             logger.error(f"Error initializing OpenAI client: {str(e)}")
             self.openai_client = None
     
+    def _initialize_deepseek_client(self):
+        """Initialize DeepSeek client (OpenAI-compatible API + custom base_url)"""
+        try:
+            if self.api_key:
+                base_url = self.base_url or "https://api.deepseek.com"
+                self.deepseek_client = OpenAI(
+                    api_key=self.api_key,
+                    base_url=base_url
+                )
+                logger.info(f"DeepSeek client initialized (base_url={base_url})")
+                return True
+            else:
+                logger.warning("No API key found for DeepSeek client initialization")
+                self.deepseek_client = None
+                return False
+        except Exception as e:
+            logger.error(f"Error initializing DeepSeek client: {str(e)}")
+            self.deepseek_client = None
+            return False
+    
     def _initialize_client(self):
         """Initialize the appropriate client based on the provider"""
         if self.provider == "anthropic":
@@ -226,6 +248,8 @@ class AIProcessor:
                 return False
         elif self.provider == "openai":
             return self._initialize_openai_client()
+        elif self.provider == "deepseek":
+            return self._initialize_deepseek_client()
         # Default to true for providers that don't need initialization
         else:
             logger.info(f"No client initialization required for provider: {self.provider}")
@@ -244,6 +268,10 @@ class AIProcessor:
             # If using OpenAI, refresh the client
             if self.provider == "openai":
                 self._initialize_openai_client()
+            
+            # DeepSeek için istemciyi yenile
+            if self.provider == "deepseek":
+                self._initialize_deepseek_client()
                 
             # Anthropic için istemciyi yenile
             if self.provider == "anthropic":
@@ -283,7 +311,7 @@ class AIProcessor:
                     return False
                 
                 # Reasoning modellerini kontrol et
-                is_reasoning_model = any(self.model.startswith(prefix) for prefix in ["o1", "o3"])
+                is_reasoning_model = any(self.model.startswith(prefix) for prefix in ["o1", "o3", "o4"])
                 
                 # API isteğini gönder
                 try:
@@ -305,7 +333,7 @@ class AIProcessor:
                             messages=[
                                 {"role": "user", "content": "Hello, testing the connection."}
                             ],
-                            max_tokens=10,
+                            max_completion_tokens=10,
                             temperature=self.temperature
                         )
                     
@@ -344,7 +372,7 @@ class AIProcessor:
                         # Model hatası ise bilinen çalışan bir model dene
                         if "model" in error_msg.lower() or "status_code=404" in error_msg.lower():
                             # Bilinen çalışan modeller listesi
-                            fallback_models = ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307", "claude-3-sonnet-20240229"]
+                            fallback_models = ["claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
                             
                             for fallback_model in fallback_models:
                                 try:
@@ -363,45 +391,50 @@ class AIProcessor:
                                 except Exception as fallback_error:
                                     logger.warning(f"Fallback model {fallback_model} failed: {str(fallback_error)}")
                                     continue
+                        # Fallback denemeleri de başarısız olursa
+                        return False
                 
-                # SDK testi başarısız olduysa veya SDK yoksa REST API ile dene
+                # SDK yoksa başarısız
+                logger.error("Anthropic SDK client not initialized")
+                return False
+            elif self.provider == "deepseek":
+                # DeepSeek bağlantı testi (OpenAI-uyumlu API)
+                if not self.deepseek_client:
+                    self._initialize_deepseek_client()
+                
+                if not self.deepseek_client:
+                    logger.error("DeepSeek client could not be initialized")
+                    return False
+                
                 try:
-                    logger.info("Testing Anthropic connection with REST API")
-                    headers = {
-                        "x-api-key": self.api_key,
-                        "anthropic-version": "2023-06-01", # Corrected API version
-                        "content-type": "application/json"
+                    logger.info(f"Testing connection with DeepSeek API using model: {self.model}")
+                    is_reasoner = self.model == "deepseek-reasoner"
+                    
+                    request_params = {
+                        "model": self.model,
+                        "messages": [
+                            {"role": "user", "content": "Hello, testing the connection."}
+                        ],
+                        # deepseek-reasoner thinking için yer ister; chat ise çok küçük yeterli.
+                        "max_tokens": 200 if is_reasoner else 10
                     }
                     
-                    # Bilinen çalışan bir modeli kullan
-                    test_model = "claude-3-5-sonnet-20241022"
+                    # deepseek-reasoner temperature/top_p parametrelerini desteklemez.
+                    if not is_reasoner:
+                        request_params["temperature"] = self.temperature
                     
-                    data = {
-                        "model": test_model,
-                        "messages": [{"role": "user", "content": "Hello, testing the connection."}],
-                        "max_tokens": 5
-                    }
+                    response = self.deepseek_client.chat.completions.create(**request_params)
                     
-                    response = requests.post(
-                        f"{self.base_url}/v1/messages",
-                        headers=headers,
-                        json=data,
-                        timeout=self.timeout
-                    )
-                    
-                    if response.status_code == 200:
-                        logger.info(f"Anthropic REST API connection test successful with model: {test_model}")
-                        # Bu modeli varsayılan olarak ayarla
-                        self.model = test_model
+                    if response and hasattr(response, 'choices') and len(response.choices) > 0:
+                        result = (response.choices[0].message.content or "").strip()
+                        logger.info(f"DeepSeek connection test successful: '{result}'")
                         return True
                     else:
-                        logger.warning(f"Anthropic API connection test failed: {response.status_code}")
-                        logger.warning(f"Error response: {response.text}")
+                        logger.error("DeepSeek API response is empty or invalid")
                         return False
                 except Exception as e:
-                    logger.warning(f"Anthropic REST API test failed: {str(e)}")
+                    logger.error(f"DeepSeek connection test failed: {str(e)}")
                     return False
-                    
             elif self.provider == "google":
                 # Yeni Google Gen AI SDK ile client kullanımı
                 try:
@@ -434,11 +467,11 @@ class AIProcessor:
                     
                     # Model bulunamazsa varsayılan modeli dene
                     if "model" in str(e).lower() and "not found" in str(e).lower():
-                        logger.warning(f"Model {self.model} not found, trying with gemini-1.5-flash")
+                        logger.warning(f"Model {self.model} not found, trying with gemini-3-flash-preview")
                         try:
-                            self.model = "gemini-1.5-flash"
+                            self.model = "gemini-3-flash-preview"
                             response = self.google_client.models.generate_content(
-                                model="gemini-1.5-flash",
+                                model="gemini-3-flash-preview",
                                 contents="Hello, testing the connection."
                             )
                             if hasattr(response, 'text') and response.text:
@@ -448,167 +481,6 @@ class AIProcessor:
                             logger.error(f"Fallback model test failed: {str(fallback_error)}")
                     
                     return False
-            elif self.provider == "deepseek":
-                # DeepSeek API test
-                try:
-                    headers = {
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {self.api_key}"
-                    }
-                    
-                    # Use a simple test request
-                    data = {
-                        "model": self.model,
-                        "messages": [{"role": "user", "content": "Hello, testing the connection."}],
-                        "max_tokens": 5
-                    }
-                    
-                    response = requests.post(
-                        f"{self.base_url}/v1/chat/completions",
-                        headers=headers,
-                        json=data,
-                        timeout=self.timeout
-                    )
-                    
-                    # Check response status
-                    logger.debug(f"DeepSeek API Response Status: {response.status_code}")
-                    
-                    if response.status_code == 200:
-                        logger.info(f"DeepSeek API connection test successful")
-                        return True
-                    elif response.status_code == 400:
-                        error_text = response.text
-                        logger.warning(f"DeepSeek API error 400: {error_text}")
-                        
-                        # Check if model not found error
-                        if "model parameter" in error_text.lower() or "model not found" in error_text.lower():
-                            logger.warning(f"Model {self.model} not supported, trying with deepseek-chat")
-                            # Try once more with a different model
-                            fallback_data = {
-                                "model": "deepseek-chat",
-                                "messages": [{"role": "user", "content": "Hello, testing the connection."}],
-                                "max_tokens": 5
-                            }
-                            
-                            fallback_response = requests.post(
-                                f"{self.base_url}/v1/chat/completions",
-                                headers=headers,
-                                json=fallback_data,
-                                timeout=self.timeout
-                            )
-                            
-                            if fallback_response.status_code == 200:
-                                logger.info(f"DeepSeek API connection test successful with fallback model")
-                                self.model = "deepseek-chat"
-                                return True
-                        
-                        logger.warning(f"DeepSeek API connection test failed: {response.status_code}")
-                        return False
-                    else:
-                        logger.warning(f"DeepSeek API connection test failed: {response.status_code}")
-                        return False
-                
-                except Exception as e:
-                    logger.error(f"DeepSeek API test failed: {str(e)}")
-                    return False
-            elif self.provider == "azure-openai":
-                # Azure OpenAI API test
-                try:
-                    # Azure OpenAI için gerekli parametreler
-                    api_version = self.config.get("providers", {}).get("azure-openai", {}).get("api_version", "2024-02-15-preview")
-                    
-                    # Base URL kontrolü
-                    if not self.base_url:
-                        logger.error("Missing base URL for Azure OpenAI")
-                        return False
-                    
-                    # OpenAI client'ı Azure için özel yapılandırma ile başlat
-                    azure_client_kwargs = {
-                        "api_key": self.api_key,
-                        "azure_endpoint": self.base_url,
-                        "api_version": api_version
-                    }
-                    
-                    azure_client = OpenAI(**azure_client_kwargs)
-                    
-                    # Bağlantı testi
-                    response = azure_client.chat.completions.create(
-                        model=self.model,
-                        messages=[
-                            {"role": "system", "content": "You are a helpful assistant."},
-                            {"role": "user", "content": "Hello, testing the connection."}
-                        ],
-                        max_tokens=5,
-                        temperature=self.temperature
-                    )
-                    
-                    # Yanıtı kontrol et
-                    if response and hasattr(response, 'choices') and len(response.choices) > 0:
-                        logger.info(f"Azure OpenAI API connection test successful: {response}")
-                        return True
-                    else:
-                        logger.warning(f"Azure OpenAI API connection test failed: Unexpected response format")
-                        return False
-                    
-                except Exception as e:
-                    logger.error(f"Azure OpenAI API test error: {str(e)}")
-                    return False
-            
-            elif self.provider == "mistral":
-                # Mistral AI API test
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}"
-                }
-                
-                data = {
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": "Hello, testing the connection."}],
-                    "max_tokens": 5
-                }
-                
-                response = requests.post(
-                    f"{self.base_url}/v1/chat/completions",
-                    headers=headers,
-                    json=data,
-                    timeout=self.timeout
-                )
-                
-                if response.status_code == 200:
-                    logger.info(f"Mistral AI API connection test successful")
-                    return True
-                else:
-                    logger.warning(f"Mistral AI API connection test failed: {response.status_code} - {response.text}")
-                    return False
-            
-            elif self.provider == "cohere":
-                # Cohere API test
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Accept": "application/json"
-                }
-                
-                data = {
-                    "model": self.model,
-                    "message": "Hello, testing the connection.",
-                    "max_tokens": 5
-                }
-                
-                response = requests.post(
-                    f"{self.base_url}/v1/generate",
-                    headers=headers,
-                    json=data,
-                    timeout=self.timeout
-                )
-                
-                if response.status_code == 200:
-                    logger.info(f"Cohere API connection test successful")
-                    return True
-                else:
-                    logger.warning(f"Cohere API connection test failed: {response.status_code} - {response.text}")
-                    return False
-            
             else:
                 logger.warning(f"Unsupported provider: {self.provider}")
                 return False
@@ -689,7 +561,6 @@ class AIProcessor:
             KEYWORDS: {keywords}
             """
             
-            # Process based on provider
             if self.provider == "openai":
                 return self._get_score_openai(system_message, user_message)
             elif self.provider == "anthropic":
@@ -698,12 +569,6 @@ class AIProcessor:
                 return self._get_score_google(system_message, user_message)
             elif self.provider == "deepseek":
                 return self._get_score_deepseek(system_message, user_message)
-            elif self.provider == "mistral":
-                return self._get_score_mistral(system_message, user_message)
-            elif self.provider == "cohere":
-                return self._get_score_cohere(system_message, user_message)
-            elif self.provider == "azure-openai":
-                return self._get_score_azure_openai(system_message, user_message)
             else:
                 logger.warning(f"Unsupported provider: {self.provider}")
                 return 0.0
@@ -731,18 +596,22 @@ class AIProcessor:
                     time.sleep(2)
                     continue
                 
-                # System ve user mesajlarını birleştirerek soruyu hazırla
-                prompt = f"{system_message}\n\n{user_message}\n\nIMPORTANT: You MUST respond with ONLY a single digit from 1 to 7 representing the relevance score. No other text is allowed."
+                user_prompt = f"{user_message}\n\nIMPORTANT: You MUST respond with ONLY a single digit from 1 to 7 representing the relevance score. No other text is allowed."
                 
-                # Temel istek parametrelerini hazırla
+                # Temel istek parametrelerini hazırla (O1 modelleri dahil v1.0 standardı)
                 request_params = {
                     "model": self.model,
                     "messages": [
-                        {"role": "user", "content": prompt}
+                        {"role": "developer", "content": system_message},
+                        {"role": "user", "content": user_prompt}
                     ],
-                    "max_tokens": 10,
-                    "temperature": self.temperature
+                    "max_completion_tokens": 10
                 }
+                
+                # Sadece reasoning olmayan modeller için temperature ekle
+                is_reasoning = any(self.model.startswith(p) for p in ["o1", "o3", "o4", "gpt-5.4"]) 
+                if not is_reasoning:
+                    request_params["temperature"] = self.temperature
                 
                 # API isteğini gönder
                 logger.info(f"Using OpenAI chat completions API with model: {self.model}")
@@ -801,6 +670,7 @@ class AIProcessor:
                         ]
                     }
                 ],
+                max_completion_tokens=10,
                 store=True
             )
             
@@ -950,9 +820,9 @@ class AIProcessor:
             raise
         except self.openai_client.BadRequestError as e:
             if "model not found" in str(e).lower():
-                logger.warning(f"Model {model} not found, falling back to gpt-4o")
+                logger.warning(f"Model {model} not found, falling back to gpt-5.4-2026-03-05")
                 # Burada _get_score_openai çağrılırken self.model kullanılır, bu doğru
-                return self._get_score_openai("gpt-4o", system_message, user_message)
+                return self._get_score_openai("gpt-5.4-2026-03-05", system_message, user_message)
             raise
         except Exception as e:
             logger.error(f"Error getting score from OpenAI: {str(e)}")
@@ -960,89 +830,153 @@ class AIProcessor:
     
     def _get_score_anthropic(self, system_message, user_message):
         """Get relevance score using Anthropic API"""
-        # Sistem ve kullanıcı mesajlarını birleştir
-        custom_prompt = f"{system_message}\n\n{user_message}"
-        
         while True:
             try:
                 # Modern Anthropic kütüphanesi ile dene
                 if hasattr(self, 'anthropic_client') and self.anthropic_client:
                     try:
-                        # Her zaman messages.create kullan
-                        logger.info(f"Using Anthropic SDK messages.create for custom prompt with model: {self.model}")
+                        logger.info(f"Using Anthropic SDK messages.create with model: {self.model}")
+                        
+                        user_prompt = f"{user_message}\n\nIMPORTANT: You MUST respond with ONLY a single digit from 1 to 7 representing the relevance score. No other text is allowed."
+                        
                         response = self.anthropic_client.messages.create(
                             model=self.model,
-                            # System prompt is not used here as it's part of the custom_prompt
+                            system=system_message,
                             messages=[
-                                {"role": "user", "content": custom_prompt} # Send the full custom prompt as user content
+                                {"role": "user", "content": user_prompt}
                             ],
-                            temperature=self.temperature,
-                            max_tokens=10 # Reduced tokens for score
+                            max_tokens=10
                         )
                         
-                        # Yanıtı işle (Claude 3.x formatı varsayılır)
+                        # Yanıtı işle
                         if response.content and isinstance(response.content, list) and len(response.content) > 0:
                             result_text = response.content[0].text.strip()
-                            logger.info(f"Anthropic SDK response for custom prompt: {result_text}")
+                            logger.info(f"Anthropic SDK response: {result_text}")
                             return self._parse_result(result_text)
                         else:
-                            logger.warning(f"Unexpected Anthropic SDK response format for custom prompt: {response}")
-                            raise Exception("Unexpected SDK response format") # Force fallback
+                            logger.warning(f"Unexpected Anthropic SDK response format: {response}")
+                            time.sleep(2)
+                            continue
 
                     except Exception as sdk_error:
-                        logger.warning(f"Anthropic SDK error for custom prompt: {str(sdk_error)}, falling back to REST API")
-                        # SDK hata verirse veya format uymazsa REST API'ye geri dön
+                        logger.warning(f"Anthropic SDK error: {str(sdk_error)}")
+                        if "429" in str(sdk_error):
+                            logger.warning("Rate limit exceeded, waiting 20 seconds...")
+                            time.sleep(20)
+                            continue
+                        time.sleep(2)
+                        continue
+                else:
+                    logger.error("Anthropic SDK client not initialized")
+                    return 4
+                    
+            except Exception as e:
+                logger.error(f"Anthropic API score extraction failed: {str(e)}")
+                time.sleep(2)
+                continue
+    
+    def _get_score_deepseek(self, system_message, user_message):
+        """Get relevance score using DeepSeek API (OpenAI-compatible)."""
+        while True:
+            try:
+                if not self.deepseek_client:
+                    self._initialize_deepseek_client()
                 
-                # --- REST API Fallback --- 
-                logger.info("Attempting Anthropic custom prompt request via REST API")
-                headers = {
-                    "x-api-key": self.api_key,
-                    "anthropic-version": "2023-06-01", # Corrected API version
-                    "content-type": "application/json"
-                }
+                if not self.deepseek_client:
+                    logger.error("DeepSeek client not initialized")
+                    time.sleep(2)
+                    continue
                 
-                # For custom prompts, the system part is usually included within the prompt itself.
-                # We send the entire custom_prompt as a single user message.
-                data = {
+                user_prompt = f"{user_message}\n\nIMPORTANT: You MUST respond with ONLY a single digit from 1 to 7 representing the relevance score. No other text is allowed."
+                
+                is_reasoner = self.model == "deepseek-reasoner"
+                
+                request_params = {
                     "model": self.model,
                     "messages": [
-                        {"role": "user", "content": custom_prompt} 
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": user_prompt}
                     ],
-                    "temperature": self.temperature,
-                    "max_tokens": 10 # Reduced tokens for score
+                    # Reasoner'da thinking + cevap için yeterli alan; chat'te tek rakam kâfi.
+                    "max_tokens": 1024 if is_reasoner else 10
                 }
                 
-                response = requests.post(
-                    f"{self.base_url}/v1/messages", # Use messages endpoint
-                    headers=headers,
-                    json=data,
-                    timeout=self.timeout
-                )
+                # deepseek-reasoner temperature kabul etmiyor.
+                if not is_reasoner:
+                    request_params["temperature"] = self.temperature
                 
-                # Check REST response
-                if response.status_code == 200:
-                    result = response.json()
-                    if "content" in result and isinstance(result["content"], list) and len(result["content"]) > 0:
-                        result_text = result["content"][0].get("text", "").strip()
-                        logger.info(f"Anthropic REST API response for custom prompt: {result_text}")
-                        return self._parse_result(result_text)
-                    else:
-                        logger.warning(f"Unexpected Anthropic REST API response format for custom prompt: {result}")
-                elif response.status_code == 429:
-                    logger.warning("Anthropic API rate limit exceeded for custom prompt, waiting 20 seconds before retry...")
-                    time.sleep(20)
-                    continue # Retry loop
-                else:
-                    # Log other HTTP errors from REST API
-                    logger.warning(f"Anthropic REST API custom prompt call failed: {response.status_code} - {response.text}")
-                    time.sleep(2)
-                    continue # Retry loop
-
+                logger.info(f"Using DeepSeek chat completions API with model: {self.model}")
+                logger.debug(f"DeepSeek request parameters: {request_params}")
+                
+                response = self.deepseek_client.chat.completions.create(**request_params)
+                
+                logger.debug(f"DeepSeek response: {response}")
+                
+                result_text = (response.choices[0].message.content or "").strip()
+                logger.info(f"DeepSeek response: '{result_text}'")
+                
+                return self._parse_result(result_text)
+            
             except Exception as e:
-                 # General errors (network issues, etc.)
-                logger.warning(f"Anthropic API custom prompt call failed: {str(e)}")
-                time.sleep(2)
-                continue # Retry loop
+                error_message = str(e)
+                logger.warning(f"DeepSeek API call failed: {error_message}")
+                
+                if "429" in error_message or "rate limit" in error_message.lower():
+                    logger.warning("Rate limit exceeded, waiting 20 seconds before retry...")
+                    time.sleep(20)
+                else:
+                    time.sleep(2)
+                continue
+    
+    def _get_score_with_prompt_deepseek(self, custom_prompt):
+        """Get relevance score using DeepSeek API with custom prompt."""
+        while True:
+            try:
+                if not self.deepseek_client:
+                    self._initialize_deepseek_client()
+                
+                if not self.deepseek_client:
+                    logger.error("DeepSeek client not initialized")
+                    time.sleep(2)
+                    continue
+                
+                enhanced_prompt = f"{custom_prompt}\n\nIMPORTANT: You MUST respond with ONLY a single digit from 1 to 7 representing the relevance score. No other text is allowed."
+                
+                is_reasoner = self.model == "deepseek-reasoner"
+                
+                request_params = {
+                    "model": self.model,
+                    "messages": [
+                        {"role": "user", "content": enhanced_prompt}
+                    ],
+                    "max_tokens": 1024 if is_reasoner else 10
+                }
+                
+                if not is_reasoner:
+                    request_params["temperature"] = self.temperature
+                
+                logger.info(f"Using DeepSeek chat completions API with model: {self.model}")
+                logger.debug(f"DeepSeek request parameters for custom prompt: {request_params}")
+                
+                response = self.deepseek_client.chat.completions.create(**request_params)
+                
+                logger.debug(f"DeepSeek response for custom prompt: {response}")
+                
+                result_text = (response.choices[0].message.content or "").strip()
+                logger.info(f"DeepSeek response for custom prompt: '{result_text}'")
+                
+                return self._parse_result(result_text)
+            
+            except Exception as e:
+                error_message = str(e)
+                logger.warning(f"DeepSeek API call failed with custom prompt: {error_message}")
+                
+                if "429" in error_message or "rate limit" in error_message.lower():
+                    logger.warning("Rate limit exceeded, waiting 20 seconds before retry...")
+                    time.sleep(20)
+                else:
+                    time.sleep(2)
+                continue
     
     def _get_score_google(self, system_message, user_message):
         """Get relevance score using Google Gen AI API"""
@@ -1079,268 +1013,51 @@ class AIProcessor:
         except Exception as e:
             logger.error(f"Error with Google API call: {str(e)}")
             if "model" in str(e).lower() and "not found" in str(e).lower():
-                logger.warning(f"Model {self.model} not found, falling back to gemini-1.5-flash")
-                self.model = "gemini-1.5-flash"
+                logger.warning(f"Model {self.model} not found, falling back to gemini-3-flash")
+                self.model = "gemini-3-flash"
             return 4
+
     
-    def _get_score_deepseek(self, system_message, user_message):
-        """Get relevance score using DeepSeek API"""
-        while True:
-            try:
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}"
-                }
-                
-                # DeepSeek-Reasoner için farklı endpoint ve format kullan
-                if self.model == "deepseek-reasoner":
-                    logger.info(f"Using DeepSeek Reasoner model with special format")
-                    
-                    # Sistem ve kullanıcı mesajını birleştir
-                    combined_message = f"{system_message}\n\n{user_message}"
-                    
-                    # DeepSeek Reasoner için API isteğini hazırla
-                    data = {
-                        "model": "deepseek-reasoner",
-                        "messages": [
-                            {"role": "user", "content": combined_message}
-                        ],
-                        "temperature": self.temperature,
-                        "max_tokens": 20,  # Sadece skorun dönmesi için kısa tutuyoruz
-                        "top_p": 0.95
-                    }
-                    
-                    # DeepSeek Reasoner için doğru endpoint kullan
-                    url = f"{self.base_url}/v1/chat/completions"
-                    
-                    logger.debug(f"DeepSeek Reasoner API Request URL: {url}")
-                    logger.debug(f"DeepSeek Reasoner API Request Data: {data}")
-                    
-                    response = requests.post(
-                        url,
-                        headers=headers,
-                        json=data,
-                        timeout=self.timeout
-                    )
-                else:
-                    # Standart DeepSeek modelleri için 
-                    data = {
-                        "model": self.model,
-                        "messages": [
-                            {"role": "system", "content": system_message},
-                            {"role": "user", "content": user_message}
-                        ],
-                        "temperature": self.temperature,
-                        "max_tokens": 10
-                    }
-                    
-                    response = requests.post(
-                        f"{self.base_url}/v1/chat/completions",
-                        headers=headers,
-                        json=data,
-                        timeout=self.timeout
-                    )
-                
-                # Yanıt durum kodunu kontrol et ve logla
-                logger.debug(f"DeepSeek API Response Status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    
-                    # Yanıt logla
-                    logger.debug(f"DeepSeek API Response: {result}")
-                    
-                    # Chat/completions endpoint için
-                    if "choices" in result and len(result["choices"]) > 0:
-                        result_text = result["choices"][0]["message"]["content"].strip()
-                        logger.info(f"DeepSeek API response: {result_text}")
-                        return self._parse_result(result_text)
-                    else:
-                        logger.warning(f"Unexpected DeepSeek API response format: {result}")
-                elif response.status_code == 400:
-                    error_text = response.text
-                    logger.warning(f"DeepSeek API error 400: {error_text}")
-                    
-                    # Hata mesajını detaylı inceleme
-                    if "model parameter" in error_text.lower() or "model not found" in error_text.lower():
-                        logger.warning(f"Model {self.model} not supported, falling back to deepseek-chat")
-                        self.model = "deepseek-chat"
-                        continue
-                    elif "api key" in error_text.lower() or "authentication" in error_text.lower():
-                        logger.error("DeepSeek API authentication error - invalid API key")
-                        return 4  # Authentication error, return default score
-                    
-                    # Diğer 400 hataları için bekleme ve yeniden deneme
-                    time.sleep(2)
-                    continue
-                elif response.status_code == 429:
-                    logger.warning(f"DeepSeek API çağrısı başarısız: {response.status_code} - {response.text}")
-                    logger.warning("DeepSeek API rate limit exceeded, waiting 20 seconds before retry...")
-                    time.sleep(20)  # Rate limit için 20 saniye bekle
-                    continue
-                else:
-                    logger.warning(f"DeepSeek API call failed: {response.status_code} - {response.text}")
-                    time.sleep(2)  # Normal hatalar için 2 saniye bekle
-                    continue  # Continue the loop to wait for API response
+    def _get_score_google(self, system_message, user_message):
+        """Get relevance score using Google Gen AI API"""
+        try:
+            if not self.google_client:
+                if not self._initialize_client():
+                    logger.error("Google client could not be initialized.")
+                    return 4
+
+            logger.info(f"Sending query to Google Gen AI API: {self.model}")
             
-            except Exception as e:
-                logger.warning(f"DeepSeek API call failed: {str(e)}")
-                time.sleep(2)  # Normal hatalar için 2 saniye bekle
-                continue  # Continue the loop to wait for API response
-    
-    def _get_score_mistral(self, system_message, user_message):
-        """Get relevance score using Mistral AI API"""
-        while True:
-            try:
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}"
-                }
-                
-                data = {
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": user_message}
-                    ],
-                    "temperature": self.temperature,
-                    "max_tokens": 10
-                }
-                
-                response = requests.post(
-                    f"{self.base_url}/v1/chat/completions",
-                    headers=headers,
-                    json=data,
-                    timeout=self.timeout
+            from google.genai import types
+            
+            user_prompt = f"{user_message}\n\nIMPORTANT: You MUST respond with ONLY a single digit from 1 to 7 representing the relevance score. No other text is allowed."
+
+            response = self.google_client.models.generate_content(
+                model=self.model,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_message,
+                    temperature=self.temperature
                 )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    result_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-                    logger.info(f"Mistral AI response: {result_text}")
-                    return self._parse_result(result_text)
-                elif response.status_code == 429:
-                    logger.warning(f"Mistral AI API rate limit exceeded, waiting 20 seconds before retry...")
-                    time.sleep(20)
-                    continue
-                else:
-                    logger.warning(f"Mistral AI API call failed: {response.status_code} - {response.text}")
-                    time.sleep(2)
-                    continue
-            
-            except Exception as e:
-                logger.warning(f"API call failed: {str(e)}")
-                time.sleep(2)
-                continue
-    
-    def _get_score_cohere(self, system_message, user_message):
-        """Get relevance score using Cohere API"""
-        while True:
-            try:
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Accept": "application/json"
-                }
-                
-                # Cohere farklı bir API formatı kullanıyor
-                # Sistem ve kullanıcı mesajlarını birleştiriyoruz
-                combined_message = f"{system_message}\n\n{user_message}"
-                
-                data = {
-                    "model": self.model,
-                    "message": combined_message,
-                    "temperature": self.temperature,
-                    "max_tokens": 10
-                }
-                
-                response = requests.post(
-                    f"{self.base_url}/v1/generate",
-                    headers=headers,
-                    json=data,
-                    timeout=self.timeout
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    result_text = result.get("text", "").strip()
-                    logger.info(f"Cohere API response: {result_text}")
-                    return self._parse_result(result_text)
-                elif response.status_code == 429:
-                    logger.warning(f"Cohere API rate limit exceeded, waiting 20 seconds before retry...")
-                    time.sleep(20)
-                    continue
-                else:
-                    logger.warning(f"Cohere API call failed: {response.status_code} - {response.text}")
-                    time.sleep(2)
-                    continue
-            
-            except Exception as e:
-                logger.warning(f"API call failed: {str(e)}")
-                time.sleep(2)
-                continue
-    
-    def _get_score_azure_openai(self, system_message, user_message):
-        """Get relevance score using Azure OpenAI API"""
-        while True:
-            try:
-                # Azure OpenAI için gerekli parametreler
-                api_version = self.config.get("providers", {}).get("azure-openai", {}).get("api_version", "2024-02-15-preview")
-                
-                # Base URL kontrolü
-                if not self.base_url:
-                    logger.error("Missing base URL for Azure OpenAI")
-                    time.sleep(2)
-                    continue
-                
-                # OpenAI client'ı Azure için özel yapılandırma ile başlat
-                azure_client_kwargs = {
-                    "api_key": self.api_key,
-                    "azure_endpoint": self.base_url,
-                    "api_version": api_version
-                }
-                
-                azure_client = OpenAI(**azure_client_kwargs)
-                
-                # Temel istek parametrelerini hazırla
-                request_params = {
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": user_message}
-                    ],
-                    "temperature": self.temperature,
-                    "max_tokens": 10
-                }
-                
-                # GPT Thinking modelleri için ek parametreler
-                if "thinking" in self.model:
-                    request_params["thinking_step"] = True
-                    request_params["thinking_content"] = "detailed"
-                
-                # API isteğini gönder
-                response = azure_client.chat.completions.create(**request_params)
-                
-                # Yanıtı çıkar
-                result_text = response.choices[0].message.content.strip()
-                logger.info(f"Azure OpenAI response: {result_text}")
-                
-                # Sonucu işle
+            )
+
+            # Process response
+            logger.debug(f"Full Google API response: {response}")
+            if hasattr(response, 'text') and response.text:
+                result_text = response.text.strip()
+                logger.info(f"Google response: {result_text}")
                 return self._parse_result(result_text)
-            
-            except Exception as e:
-                error_message = str(e)
-                logger.warning(f"Azure OpenAI API call failed: {error_message}")
-                
-                # API rate limit aşıldığında daha uzun süre bekle
-                if "429" in error_message or "rate limit" in error_message.lower():
-                    logger.warning("Rate limit exceeded, waiting 20 seconds before retry...")
-                    time.sleep(20)
-                else:
-                    time.sleep(2)
-                
-                continue
-    
+            else:
+                logger.warning(f"Unexpected Google API response format or no text: {response}")
+                return 4
+
+        except Exception as e:
+            logger.error(f"Error with Google API call: {str(e)}")
+            if "model" in str(e).lower() and "not found" in str(e).lower():
+                logger.warning(f"Model {self.model} not found, falling back to gemini-3-flash-preview")
+                self.model = "gemini-3-flash-preview"
+            return 4
+
     def _parse_result(self, result_text):
         """Parse the result text to extract the score"""
         try:
@@ -1482,12 +1199,6 @@ class AIProcessor:
                 return self._get_score_with_prompt_google(custom_prompt)
             elif self.provider == "deepseek":
                 return self._get_score_with_prompt_deepseek(custom_prompt)
-            elif self.provider == "mistral":
-                return self._get_score_with_prompt_mistral(custom_prompt)
-            elif self.provider == "cohere":
-                return self._get_score_with_prompt_cohere(custom_prompt)
-            elif self.provider == "azure-openai":
-                return self._get_score_with_prompt_azure_openai(custom_prompt)
             else:
                 logger.warning(f"Unsupported provider: {self.provider}")
                 return 0.0
@@ -1499,7 +1210,7 @@ class AIProcessor:
     def _get_score_with_prompt_openai(self, custom_prompt):
         """Get relevance score using OpenAI API with custom prompt"""
         # Reasoning modelleri için ayrı işleyici
-        if any(self.model.startswith(prefix) for prefix in ["o1", "o3"]):
+        if any(self.model.startswith(prefix) for prefix in ["o1", "o3", "o4"]):
             return self._get_score_with_prompt_openai_reasoning(custom_prompt)
         
         # Normal OpenAI modelleri için standart işleyici
@@ -1524,9 +1235,14 @@ class AIProcessor:
                     "messages": [
                         {"role": "user", "content": enhanced_prompt}
                     ],
-                    "max_tokens": 10,
-                    "temperature": self.temperature
+                    "max_completion_tokens": 10
                 }
+                
+                # Sadece reasoning olmayan modeller için temperature ekle
+                is_reasoning = any(self.model.startswith(p) for p in ["o1", "o3", "o4", "gpt-5.4"]) 
+                if not is_reasoning:
+                    request_params["temperature"] = self.temperature
+                # O1 ve GPT-5.4 modelleri temperature sevmiyor, zaten is_reasoning içinde eledik.
                 
                 # API isteğini gönder
                 logger.info(f"Using OpenAI chat completions API with model: {self.model}")
@@ -1620,18 +1336,18 @@ class AIProcessor:
                     
                     # Model bulunamadıysa standart modele geç
                     if "model not found" in str(api_error).lower():
-                        logger.warning(f"Model {self.model} not found, falling back to gpt-4o")
+                        logger.warning(f"Model {self.model} not found, falling back to gpt-5.4-2026-03-05")
                         original_model = self.model
-                        self.model = "gpt-4o"
+                        self.model = "gpt-5.4-2026-03-05"
                         
                         # Standart API yöntemiyle dene
                         try:
                             response = self.openai_client.chat.completions.create(
-                                model="gpt-4o",
+                                model="gpt-5.4-2026-03-05",
                                 messages=[
                                     {"role": "user", "content": enhanced_prompt}
                                 ],
-                                max_tokens=10,
+                                max_completion_tokens=10,
                                 temperature=0
                             )
                             
@@ -1669,81 +1385,44 @@ class AIProcessor:
                 # Modern Anthropic kütüphanesi ile dene
                 if hasattr(self, 'anthropic_client') and self.anthropic_client:
                     try:
-                        # Her zaman messages.create kullan
                         logger.info(f"Using Anthropic SDK messages.create for custom prompt with model: {self.model}")
+                        
+                        enhanced_prompt = f"{custom_prompt}\n\nIMPORTANT: You MUST respond with ONLY a single digit from 1 to 7 representing the relevance score. No other text is allowed."
+                        
                         response = self.anthropic_client.messages.create(
                             model=self.model,
-                            # System prompt is not used here as it's part of the custom_prompt
                             messages=[
-                                {"role": "user", "content": custom_prompt} # Send the full custom prompt as user content
+                                {"role": "user", "content": enhanced_prompt}
                             ],
-                            temperature=self.temperature,
-                            max_tokens=10 # Reduced tokens for score
+                            max_tokens=10
                         )
                         
-                        # Yanıtı işle (Claude 3.x formatı varsayılır)
+                        # Yanıtı işle
                         if response.content and isinstance(response.content, list) and len(response.content) > 0:
                             result_text = response.content[0].text.strip()
                             logger.info(f"Anthropic SDK response for custom prompt: {result_text}")
                             return self._parse_result(result_text)
                         else:
                             logger.warning(f"Unexpected Anthropic SDK response format for custom prompt: {response}")
-                            raise Exception("Unexpected SDK response format") # Force fallback
+                            time.sleep(2)
+                            continue
 
                     except Exception as sdk_error:
-                        logger.warning(f"Anthropic SDK error for custom prompt: {str(sdk_error)}, falling back to REST API")
-                        # SDK hata verirse veya format uymazsa REST API'ye geri dön
-                
-                # --- REST API Fallback --- 
-                logger.info("Attempting Anthropic custom prompt request via REST API")
-                headers = {
-                    "x-api-key": self.api_key,
-                    "anthropic-version": "2023-06-01", # Corrected API version
-                    "content-type": "application/json"
-                }
-                
-                # For custom prompts, the system part is usually included within the prompt itself.
-                # We send the entire custom_prompt as a single user message.
-                data = {
-                    "model": self.model,
-                    "messages": [
-                        {"role": "user", "content": custom_prompt} 
-                    ],
-                    "temperature": self.temperature,
-                    "max_tokens": 10 # Reduced tokens for score
-                }
-                
-                response = requests.post(
-                    f"{self.base_url}/v1/messages", # Use messages endpoint
-                    headers=headers,
-                    json=data,
-                    timeout=self.timeout
-                )
-                
-                # Check REST response
-                if response.status_code == 200:
-                    result = response.json()
-                    if "content" in result and isinstance(result["content"], list) and len(result["content"]) > 0:
-                        result_text = result["content"][0].get("text", "").strip()
-                        logger.info(f"Anthropic REST API response for custom prompt: {result_text}")
-                        return self._parse_result(result_text)
-                    else:
-                        logger.warning(f"Unexpected Anthropic REST API response format for custom prompt: {result}")
-                elif response.status_code == 429:
-                    logger.warning("Anthropic API rate limit exceeded for custom prompt, waiting 20 seconds before retry...")
-                    time.sleep(20)
-                    continue # Retry loop
+                        logger.warning(f"Anthropic SDK error for custom prompt: {str(sdk_error)}")
+                        if "429" in str(sdk_error):
+                            logger.warning("Rate limit exceeded, waiting 20 seconds...")
+                            time.sleep(20)
+                            continue
+                        time.sleep(2)
+                        continue
                 else:
-                    # Log other HTTP errors from REST API
-                    logger.warning(f"Anthropic REST API custom prompt call failed: {response.status_code} - {response.text}")
-                    time.sleep(2)
-                    continue # Retry loop
+                    logger.error("Anthropic SDK client not initialized")
+                    return 4
 
             except Exception as e:
-                 # General errors (network issues, etc.)
-                logger.warning(f"Anthropic API custom prompt call failed: {str(e)}")
+                logger.error(f"Anthropic API custom prompt call failed: {str(e)}")
                 time.sleep(2)
-                continue # Retry loop
+                continue
     
     def _get_score_with_prompt_google(self, custom_prompt):
         """Get relevance score using Google Gen AI API with custom prompt"""
@@ -1778,263 +1457,10 @@ class AIProcessor:
         except Exception as e:
             logger.error(f"Error with Google API call: {str(e)}")
             if "model" in str(e).lower() and "not found" in str(e).lower():
-                 logger.warning(f"Model {self.model} not found for custom prompt, falling back to gemini-1.5-flash")
-                 self.model = "gemini-1.5-flash"
+                 logger.warning(f"Model {self.model} not found for custom prompt, falling back to gemini-3-flash-preview")
+                 self.model = "gemini-3-flash-preview"
             return 4
-    
-    def _get_score_with_prompt_deepseek(self, custom_prompt):
-        """Get relevance score using DeepSeek API with custom prompt"""
-        while True:
-            try:
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}"
-                }
-                
-                # DeepSeek-Reasoner için farklı format kullan
-                if self.model == "deepseek-reasoner":
-                    logger.info(f"Using DeepSeek Reasoner model with special format for custom prompt")
-                    
-                    # DeepSeek Reasoner için API isteğini hazırla
-                    data = {
-                        "model": "deepseek-reasoner",
-                        "messages": [
-                            {"role": "user", "content": custom_prompt}
-                        ],
-                        "temperature": self.temperature,
-                        "max_tokens": 20,  # Sadece skorun dönmesi için kısa tutuyoruz
-                        "top_p": 0.95
-                    }
-                    
-                    # DeepSeek Reasoner için doğru endpoint kullan
-                    url = f"{self.base_url}/v1/chat/completions"
-                    
-                    logger.debug(f"DeepSeek Reasoner API Custom Prompt Request URL: {url}")
-                    logger.debug(f"DeepSeek Reasoner API Custom Prompt Request Data: {data}")
-                    
-                    response = requests.post(
-                        url,
-                        headers=headers,
-                        json=data,
-                        timeout=self.timeout
-                    )
-                else:
-                    # Standart DeepSeek modelleri için
-                    data = {
-                        "model": self.model,
-                        "messages": [
-                            {"role": "system", "content": custom_prompt}
-                        ],
-                        "temperature": self.temperature,
-                        "max_tokens": 20
-                    }
-                    
-                    response = requests.post(
-                        f"{self.base_url}/v1/chat/completions",
-                        headers=headers,
-                        json=data,
-                        timeout=self.timeout
-                    )
-                
-                # Yanıt durum kodunu kontrol et ve logla
-                logger.debug(f"DeepSeek API Custom Prompt Response Status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    
-                    # Yanıt logla
-                    logger.debug(f"DeepSeek API Custom Prompt Response: {result}")
-                    
-                    # Yanıt formatını kontrol et
-                    if "choices" in result and len(result["choices"]) > 0:
-                        result_text = result["choices"][0]["message"]["content"].strip()
-                        logger.info(f"DeepSeek response for custom prompt: {result_text}")
-                        return self._parse_result(result_text)
-                    else:
-                        logger.warning(f"Unexpected DeepSeek API response format for custom prompt: {result}")
-                        time.sleep(2)
-                        continue
-                elif response.status_code == 400:
-                    error_text = response.text
-                    logger.warning(f"DeepSeek API custom prompt error 400: {error_text}")
-                    
-                    # Hata mesajını detaylı inceleme
-                    if "model parameter" in error_text.lower() or "model not found" in error_text.lower():
-                        logger.warning(f"Model {self.model} not supported for custom prompt, falling back to deepseek-chat")
-                        self.model = "deepseek-chat"
-                        continue
-                    elif "api key" in error_text.lower() or "authentication" in error_text.lower():
-                        logger.error("DeepSeek API authentication error for custom prompt - invalid API key")
-                        return 4  # Authentication error, return default score
-                    
-                    # Diğer 400 hataları için bekleme ve yeniden deneme
-                    time.sleep(2)
-                    continue
-                elif response.status_code == 429:
-                    logger.warning(f"DeepSeek API çağrısı başarısız: {response.status_code} - {response.text}")
-                    logger.warning("DeepSeek API rate limit exceeded, waiting 20 seconds before retry...")
-                    time.sleep(20)  # Rate limit için 20 saniye bekle
-                    continue
-                else:
-                    logger.warning(f"DeepSeek API call failed: {response.status_code}")
-                    time.sleep(2)  # Normal hatalar için 2 saniye bekle
-                    continue
-            
-            except Exception as e:
-                logger.warning(f"API call failed: {str(e)}")
-                time.sleep(2)  # Normal hatalar için 2 saniye bekle
-                continue
-    
-    def _get_score_with_prompt_mistral(self, custom_prompt):
-        """Get relevance score using Mistral AI API with custom prompt"""
-        while True:
-            try:
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}"
-                }
-                
-                data = {
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": custom_prompt}
-                    ],
-                    "temperature": self.temperature,
-                    "max_tokens": 10
-                }
-                
-                response = requests.post(
-                    f"{self.base_url}/v1/chat/completions",
-                    headers=headers,
-                    json=data,
-                    timeout=self.timeout
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    result_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-                    logger.info(f"Mistral AI response for custom prompt: {result_text}")
-                    return self._parse_result(result_text)
-                elif response.status_code == 429:
-                    logger.warning(f"Mistral AI API rate limit exceeded, waiting 20 seconds before retry...")
-                    time.sleep(20)
-                    continue
-                else:
-                    logger.warning(f"Mistral AI API call failed: {response.status_code} - {response.text}")
-                    time.sleep(2)
-                    continue
-            
-            except Exception as e:
-                logger.warning(f"API call failed: {str(e)}")
-                time.sleep(2)
-                continue
-    
-    def _get_score_with_prompt_cohere(self, custom_prompt):
-        """Get relevance score using Cohere API with custom prompt"""
-        while True:
-            try:
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Accept": "application/json"
-                }
-                
-                # Cohere farklı bir API formatı kullanıyor
-                # Sistem ve kullanıcı mesajlarını birleştiriyoruz
-                combined_message = f"{custom_prompt}\n\n{self.model}"
-                
-                data = {
-                    "model": self.model,
-                    "message": combined_message,
-                    "temperature": self.temperature,
-                    "max_tokens": 10
-                }
-                
-                response = requests.post(
-                    f"{self.base_url}/v1/generate",
-                    headers=headers,
-                    json=data,
-                    timeout=self.timeout
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    result_text = result.get("text", "").strip()
-                    logger.info(f"Cohere API response for custom prompt: {result_text}")
-                    return self._parse_result(result_text)
-                elif response.status_code == 429:
-                    logger.warning(f"Cohere API rate limit exceeded, waiting 20 seconds before retry...")
-                    time.sleep(20)
-                    continue
-                else:
-                    logger.warning(f"Cohere API call failed: {response.status_code} - {response.text}")
-                    time.sleep(2)
-                    continue
-            
-            except Exception as e:
-                logger.warning(f"API call failed: {str(e)}")
-                time.sleep(2)
-                continue
-    
-    def _get_score_with_prompt_azure_openai(self, custom_prompt):
-        """Get relevance score using Azure OpenAI API with custom prompt"""
-        while True:
-            try:
-                # Azure OpenAI için gerekli parametreler
-                api_version = self.config.get("providers", {}).get("azure-openai", {}).get("api_version", "2024-02-15-preview")
-                
-                # Base URL kontrolü
-                if not self.base_url:
-                    logger.error("Missing base URL for Azure OpenAI")
-                    time.sleep(2)
-                    continue
-                
-                # OpenAI client'ı Azure için özel yapılandırma ile başlat
-                azure_client_kwargs = {
-                    "api_key": self.api_key,
-                    "azure_endpoint": self.base_url,
-                    "api_version": api_version
-                }
-                
-                azure_client = OpenAI(**azure_client_kwargs)
-                
-                # Temel istek parametrelerini hazırla
-                request_params = {
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": custom_prompt}
-                    ],
-                    "temperature": self.temperature,
-                    "max_tokens": 10
-                }
-                
-                # GPT Thinking modelleri için ek parametreler
-                if "thinking" in self.model:
-                    request_params["thinking_step"] = True
-                    request_params["thinking_content"] = "detailed"
-                
-                # API isteğini gönder
-                response = azure_client.chat.completions.create(**request_params)
-                
-                # Yanıtı çıkar
-                result_text = response.choices[0].message.content.strip()
-                logger.info(f"Azure OpenAI response for custom prompt: {result_text}")
-                
-                # Sonucu işle
-                return self._parse_result(result_text)
-            
-            except Exception as e:
-                error_message = str(e)
-                logger.warning(f"Azure OpenAI API call failed: {error_message}")
-                
-                # API rate limit aşıldığında daha uzun süre bekle
-                if "429" in error_message or "rate limit" in error_message.lower():
-                    logger.warning("Rate limit exceeded, waiting 20 seconds before retry...")
-                    time.sleep(20)
-                else:
-                    time.sleep(2)
-                
-                continue
+
     
     def update_model_combo(self):
         """Update the model combo box based on selected provider"""
@@ -2058,7 +1484,7 @@ class AIProcessor:
         provider_map = {
             0: "openai",
             1: "anthropic",
-            2: "google", 
+            2: "google",
             3: "deepseek"
         }
         
@@ -2132,55 +1558,36 @@ class AIProcessor:
             # Hata durumunda varsayılan modellere geri dön
 
     def _update_provider_models(self):
-        """Mevcut modellerin listesini günceller - Son 3 model ile sınırlı"""
+        """Mevcut modellerin listesini günceller - Nisan 2026 güncellemesi"""
         try:
-            # OpenAI modelleri - En son 3 model (2025 güncellemesi)
+            # OpenAI modelleri - Nisan 2026 (Premium / Orta / Hızlı)
             openai_models = [
-                "o3-mini",
-                "gpt-4.1", 
-                "o4-mini"
+                "gpt-5.4-2026-03-05",
+                "gpt-5.4-mini-2026-03-17",
+                "gpt-5.4-nano-2026-03-17"
             ]
             
-            # Anthropic modelleri - En son 3 model (2025 güncellemesi)
+            # Anthropic modelleri - Nisan 2026 (Premium / Orta / Hızlı)
             anthropic_models = [
-                "claude-4-sonnet",
-                "claude-3-7-sonnet",
-                "claude-4-opus"
+                "claude-opus-4-7",
+                "claude-sonnet-4-6",
+                "claude-haiku-4-5-20251001"
             ]
             
-            # Google modelleri - En son 3 model (2025 güncellemesi)
+            # Google modelleri - Nisan 2026 (Premium / Orta / Hızlı)
             google_models = [
-                "gemini-2.5-pro",
-                "gemini-2.5-flash",
-                "gemini-2.0-flash"
+                "gemini-3.1-pro-preview",
+                "gemini-3-flash-preview",
+                "gemini-3.1-flash-lite-preview"
             ]
             
-            # DeepSeek modelleri - En son 3 model
+            # DeepSeek modelleri - Nisan 2026 (Premium / Orta)
+            # Resmi /models endpoint'i yalnızca bu iki modeli döndürüyor.
+            # deepseek-reasoner = V3.2 Thinking Mode (premium reasoning)
+            # deepseek-chat     = V3.2 Non-thinking Mode (standart)
             deepseek_models = [
                 "deepseek-reasoner",
-                "deepseek-r1",
                 "deepseek-chat"
-            ]
-            
-            # Mistral modelleri - En son 3 model
-            mistral_models = [
-                "mistral-large-latest",
-                "mistral-medium-latest",
-                "codestral-2501"
-            ]
-            
-            # Cohere modelleri - En son 3 model
-            cohere_models = [
-                "command-r-plus",
-                "command-a",
-                "command-r"
-            ]
-            
-            # Azure OpenAI modelleri - Son 3 model korundu
-            azure_openai_models = [
-                "gpt-4",
-                "gpt-4-turbo",
-                "gpt-35-turbo"
             ]
             
             # Modelleri config'e ekle
@@ -2200,18 +1607,8 @@ class AIProcessor:
                 # DeepSeek
                 if "deepseek" in self.config["providers"]:
                     self.config["providers"]["deepseek"]["models"] = deepseek_models
-                
-                # Mistral
-                if "mistral" in self.config["providers"]:
-                    self.config["providers"]["mistral"]["models"] = mistral_models
-                
-                # Cohere
-                if "cohere" in self.config["providers"]:
-                    self.config["providers"]["cohere"]["models"] = cohere_models
-                
-                # Azure OpenAI
-                if "azure-openai" in self.config["providers"]:
-                    self.config["providers"]["azure-openai"]["models"] = azure_openai_models
+                    if not self.config["providers"]["deepseek"].get("base_url"):
+                        self.config["providers"]["deepseek"]["base_url"] = "https://api.deepseek.com"
         except Exception as e:
             logger.error(f"Error updating provider models: {str(e)}")
     

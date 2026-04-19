@@ -3,31 +3,31 @@
     "providers": {
         "openai": {
             "api_key": "sk-YOUR_OPENAI_API_KEY_HERE",
-            "active_model": "o3-mini",
+            "active_model": "gpt-5.4-2026-03-05",
             "models": [
-                "o3-mini",
-                "gpt-4.1",
-                "o4-mini"
+                "gpt-5.4-2026-03-05",
+                "gpt-5.4-mini-2026-03-17",
+                "gpt-5.4-nano-2026-03-17"
             ],
             "base_url": "https://api.openai.com/v1"
         },
         "anthropic": {
             "api_key": "sk-ant-YOUR_ANTHROPIC_API_KEY_HERE",
-            "active_model": "claude-4-sonnet",
+            "active_model": "claude-opus-4-7",
             "models": [
-                "claude-4-sonnet",
-                "claude-3-7-sonnet",
-                "claude-4-opus"
+                "claude-opus-4-7",
+                "claude-sonnet-4-6",
+                "claude-haiku-4-5-20251001"
             ],
             "base_url": "https://api.anthropic.com"
         },
         "google": {
             "api_key": "YOUR_GOOGLE_API_KEY_HERE",
-            "active_model": "gemini-2.5-pro",
+            "active_model": "gemini-3-flash-preview",
             "models": [
-                "gemini-2.5-pro",
-                "gemini-2.5-flash",
-                "gemini-2.0-flash"
+                "gemini-3.1-pro-preview",
+                "gemini-3-flash-preview",
+                "gemini-3.1-flash-lite-preview"
             ],
             "base_url": "https://generativelanguage.googleapis.com"
         },
@@ -36,41 +36,9 @@
             "active_model": "deepseek-reasoner",
             "models": [
                 "deepseek-reasoner",
-                "deepseek-r1",
                 "deepseek-chat"
             ],
             "base_url": "https://api.deepseek.com"
-        },
-        "mistral": {
-            "api_key": "YOUR_MISTRAL_API_KEY_HERE",
-            "base_url": "https://api.mistral.ai",
-            "active_model": "mistral-large-latest",
-            "models": [
-                "mistral-large-latest",
-                "mistral-medium-latest",
-                "codestral-2501"
-            ]
-        },
-        "cohere": {
-            "api_key": "YOUR_COHERE_API_KEY_HERE",
-            "base_url": "https://api.cohere.ai",
-            "active_model": "command-r-plus",
-            "models": [
-                "command-r-plus",
-                "command-a",
-                "command-r"
-            ]
-        },
-        "azure-openai": {
-            "api_key": "YOUR_AZURE_OPENAI_API_KEY_HERE",
-            "base_url": "https://YOUR_AZURE_ENDPOINT.openai.azure.com",
-            "active_model": "gpt-4",
-            "models": [
-                "gpt-4",
-                "gpt-4-turbo",
-                "gpt-35-turbo"
-            ],
-            "api_version": "2024-02-15-preview"
         }
     },
     "settings": {

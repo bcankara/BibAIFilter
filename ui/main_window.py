@@ -887,8 +887,17 @@ class MainWindow(QMainWindow):
         model = self.ai_processor.model.lower()
         
         # OpenAI modelleri için kısaltmalar
-        if "gpt-4o" in model:
+        if "gpt-5.4" in model:
+            if "mini" in model:
+                return "gpt54mini"
+            elif "nano" in model:
+                return "gpt54nano"
+            else:
+                return "gpt54"
+        elif "gpt-4o" in model:
             return "gpt4o"
+        elif "o3-mini" in model:
+            return "o3mini"
         elif "gpt-4-turbo" in model:
             return "gpt4turbo"
         elif "gpt-4" in model:
@@ -901,37 +910,54 @@ class MainWindow(QMainWindow):
             return "gpt35"
             
         # Claude modelleri için kısaltmalar
-        elif "claude-3-7-sonnet" in model:
-            return "claude37sonnet"
-        elif "claude-3-5-sonnet" in model:
-            return "claude35sonnet"
-        elif "claude-3-5-haiku" in model:
-            return "claude35haiku"
-        elif "claude-3" in model:
-            if "opus" in model:
-                return "claude3opus"
-            elif "sonnet" in model:
-                return "claude3sonnet"
-            elif "haiku" in model:
-                return "claude3haiku"
+        elif "claude" in model:
+            clean_name = model.replace("-", "").replace(".", "")
+            if "opus47" in clean_name:
+                return "claude4opus"
+            elif "sonnet46" in clean_name:
+                return "claude4sonnet"
+            elif "haiku45" in clean_name:
+                return "claude4haiku"
+            elif "37sonnet" in clean_name:
+                return "claude37sonnet"
+            elif "35sonnet" in clean_name:
+                return "claude35sonnet"
+            elif "35haiku" in clean_name:
+                return "claude35haiku"
+            elif "opus" in clean_name:
+                return "claudeopus"
+            elif "sonnet" in clean_name:
+                return "claudesonnet"
+            elif "haiku" in clean_name:
+                return "claudehaiku"
             else:
-                return "claude3"
+                return "claude"
                 
         # Gemini modelleri için kısaltmalar
         elif "gemini" in model:
-            if "flash" in model:
+            # Preview modellerine özel temizlik
+            clean_name = model.replace("-preview", "").replace(".", "")
+            if "31pro" in clean_name:
+                return "gemini31pro"
+            elif "3flashlite" in clean_name or "31flashlite" in clean_name:
+                return "gemini31flashlite"
+            elif "3flash" in clean_name:
+                return "gemini3flash"
+            elif "flash" in clean_name:
                 return "geminiflash"
-            elif "pro" in model:
+            elif "pro" in clean_name:
                 return "geminipro"
-            elif "ultra" in model:
+            elif "ultra" in clean_name:
                 return "geminiultra"
             else:
                 return "gemini"
-                
-        # DeepSeek modelleri için kısaltmalar
+        
+        # DeepSeek modelleri için kısaltmalar (Nisan 2026)
         elif "deepseek" in model:
-            if "coder" in model:
-                return "deepseekcoder"
+            if "reasoner" in model:
+                return "deepseekr"
+            elif "chat" in model:
+                return "deepseekc"
             else:
                 return "deepseek"
                 
@@ -1462,23 +1488,24 @@ class MainWindow(QMainWindow):
             <p>To use the AI filtering functionality, you need to provide your API key for your chosen provider. 
             These keys are used to authenticate your requests to the AI service.</p>
             <br>
-            <h3>Supported Providers:</h3>
+            <h3>Supported Providers (Reverted to Actual APIs):</h3>
             <ul>
-                <li><strong>OpenAI</strong>: Provider of GPT models (GPT-3.5, GPT-4). These models offer excellent 
-                performance for academic paper filtering. <a href='https://platform.openai.com/signup'>Get API key</a></li>
-                <li><strong>Anthropic</strong>: Provider of Claude models (Claude 2, Claude Instant). Claude models are 
-                particularly good at understanding complex academic texts. <a href='https://console.anthropic.com/'>Get API key</a></li>
-                <li><strong>Google</strong>: Provider of Gemini models. These models offer strong performance and are tightly 
-                integrated with Google's ecosystem. <a href='https://ai.google.dev/'>Get API key</a></li>
-                <li><strong>DeepSeek</strong>: Provider of alternative AI models with competitive pricing. 
+                <li><strong>OpenAI</strong>: GPT-5.4 (2026-03 snapshot), mini, nano modelleri. 
+                <a href='https://platform.openai.com/signup'>Get API key</a></li>
+                <li><strong>Anthropic</strong>: Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 20251001 modelleri. 
+                <a href='https://console.anthropic.com/'>Get API key</a></li>
+                <li><strong>Google</strong>: Gemini 3.1 Pro Preview, 3 Flash Preview, 3.1 Flash Lite Preview modelleri. 
+                <a href='https://ai.google.dev/'>Get API key</a></li>
+                <li><strong>DeepSeek</strong>: DeepSeek-Reasoner (V3.2 Thinking, premium) ve DeepSeek-Chat (V3.2 standard) modelleri.
                 <a href='https://platform.deepseek.com/'>Get API key</a></li>
             </ul>
             <br>
             <h3>Model Selection:</h3>
-            <p>Choose the appropriate model based on your needs:</p>
+            <p>Each provider offers 2-3 tiers (DeepSeek currently provides 2):</p>
             <ul>
-                <li><strong>More powerful models</strong> (like GPT-4, Claude 2, Gemini Pro) provide better accuracy but cost more.</li>
-                <li><strong>Faster models</strong> (like GPT-3.5 Turbo, Claude Instant) are more economical and process papers more quickly.</li>
+                <li><strong>Premium</strong>: Highest accuracy, best for critical analysis. Higher cost per request.</li>
+                <li><strong>Orta (Mid)</strong>: Good balance of accuracy and speed. Recommended for most use cases.</li>
+                <li><strong>Hızlı (Fast)</strong>: Fastest processing, most economical. Ideal for large batches.</li>
             </ul>
             <br>
             <h3>Temperature Setting:</h3>
@@ -1581,9 +1608,9 @@ class MainWindow(QMainWindow):
         self.ai_processor.base_url = self.provider_base_urls[current_provider].text()
         
         # Seçili modeli kaydet ve ayarla
-        selected_model = self.model_combo.currentText()
+        selected_model = self.model_combo.currentData()
         if selected_model:
-            # Uygulamaya ayarla
+            # Uygulamaya ayarla (ham model ID kullan, etiket değil)
             self.ai_processor.model = selected_model
             
             # Config'e kaydet - active_model olarak
@@ -1660,7 +1687,7 @@ class MainWindow(QMainWindow):
         
         self.ai_processor.api_key = api_key
         self.ai_processor.base_url = base_url
-        self.ai_processor.model = self.model_combo.currentText()
+        self.ai_processor.model = self.model_combo.currentData() or self.model_combo.currentText()
         
         if not self.ai_processor.api_key:
             QMessageBox.warning(self, "Missing API Key", "Please enter your API key first.")
@@ -1775,7 +1802,7 @@ class MainWindow(QMainWindow):
         provider_map = {
             0: "openai",
             1: "anthropic",
-            2: "google", 
+            2: "google",
             3: "deepseek"
         }
         
@@ -1875,19 +1902,24 @@ class MainWindow(QMainWindow):
         """Model combo kutusunda değişiklik olduğunda çağrılır"""
         if not model_text:
             return
-            
-        # Modeli processor'da güncelle
-        self.ai_processor.model = model_text
+        
+        # userData'dan ham model ID'sini al (tier etiketli combobox için)
+        raw_model = self.model_combo.currentData()
+        if not raw_model:
+            raw_model = model_text  # Fallback: etiket yoksa doğrudan text kullan
+        
+        # Modeli processor'da güncelle (ham model ID kullan, etiket değil)
+        self.ai_processor.model = raw_model
         
         # Log for debugging
-        logger.info(f"Model changed to: {model_text}")
+        logger.info(f"Model changed to: {raw_model}")
         
         # Mevcut sağlayıcıyı al
         current_provider = self.ai_processor.provider
         
         # Config'de active_model'i güncelle
         if "providers" in self.ai_processor.config and current_provider in self.ai_processor.config["providers"]:
-            self.ai_processor.config["providers"][current_provider]["active_model"] = model_text
+            self.ai_processor.config["providers"][current_provider]["active_model"] = raw_model
         
         # Önce model kısaltmasını al
         model_abbr = self.get_model_abbreviation()
@@ -1951,17 +1983,24 @@ class MainWindow(QMainWindow):
         models = provider_config.get("models", [])
         active_model = provider_config.get("active_model", "")
         
+        # Tier etiket haritası — sıralama: Premium / Orta / Hızlı
+        tier_labels = ["Premium", "Orta", "Hızlı"]
+        
         # Log for debugging
         logger.info(f"Active provider: {self.ai_processor.provider}, available models: {models}")
         logger.info(f"Active model from config: {active_model}")
         
-        # Add models to combo box
-        self.model_combo.addItems(models)
+        # Model'leri tier etiketli olarak ekle
+        for i, model_id in enumerate(models):
+            tier = tier_labels[i] if i < len(tier_labels) else f"Model {i+1}"
+            label = f"{tier} — {model_id}"
+            self.model_combo.addItem(label, userData=model_id)
         
         # Set current model if it exists in the list
         if active_model and active_model in models:
-            logger.info(f"Setting current model to: {active_model}")
-            self.model_combo.setCurrentText(active_model)
+            idx = models.index(active_model)
+            logger.info(f"Setting current model to: {active_model} (index {idx})")
+            self.model_combo.setCurrentIndex(idx)
             # Processor'ı da güncelle
             self.ai_processor.model = active_model
     

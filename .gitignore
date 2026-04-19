@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE & tool config
+.idea/
+.vscode/
+.cursor/
+.claude/
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local secrets (do NOT commit real API keys)
+# The placeholder version of API_Settings.json is tracked; user's real keys
+# live in their working copy and must not be pushed.
+secrets.json
+.env
+.env.*
