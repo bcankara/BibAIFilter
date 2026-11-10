@@ -1,0 +1,13 @@
+{
+  "name": "genai-education_scores_qwen3-8b",
+  "input": "sample_records.csv",
+  "task": "score",
+  "preset": "score-v2",
+  "topic": "Generative AI tools used for teaching or learning in schools",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "base_url": "http://localhost:11434/v1",
+  "settings": {"temperature": 0, "seed": 42, "structured": true},
+  "repetitions": 5,
+  "output_dir": "results"
+}

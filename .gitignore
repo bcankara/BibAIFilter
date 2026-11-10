@@ -1,39 +1,35 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
+*.egg-info/
+build/
+dist/
+.pytest_cache/
 
 # Virtual environments
 .venv/
 venv/
 env/
-ENV/
 
-# IDE & tool config
+# Web interface sources (the built copy in src/bibaifilter/_web IS committed,
+# so that `pip install git+...` works without Node.js)
+web/node_modules/
+web/.next/
+web/out/
+
+# IDE & tools
 .idea/
 .vscode/
 .cursor/
 .claude/
 
-# Build / dist
-build/
-dist/
-*.egg-info/
-*.egg
-
-# Logs
-*.log
-logs/
-
 # OS
 .DS_Store
 Thumbs.db
 
-# Local secrets (do NOT commit real API keys)
-# The placeholder version of API_Settings.json is tracked; user's real keys
-# live in their working copy and must not be pushed.
+# Local data and secrets — never commit
+bibaifilter-data/
 secrets.json
 .env
 .env.*
+*.log

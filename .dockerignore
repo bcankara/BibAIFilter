@@ -1,0 +1,8 @@
+.git
+.venv
+web/node_modules
+web/.next
+web/out
+**/__pycache__
+dist
+build

@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bibaifilter"
+version = "2.0.0"
+description = "LLM-assisted relevance scoring and eligibility screening of bibliographic records, with full call-level audit logs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Burak Can Kara" }, { name = "Alperen Şahin" }]
+keywords = ["systematic review", "screening", "bibliometrics", "large language models", "relevance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Framework :: FastAPI",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.6",
+    "httpx>=0.27",
+    "pandas>=2.2,<4",
+    "numpy>=1.24",
+    "scipy>=1.11",
+    "openpyxl>=3.1.2",
+    "xlrd>=2.0.1",
+    "platformdirs>=3.0",
+]
+
+[project.optional-dependencies]
+keyring = ["keyring>=24"]
+dev = ["pytest>=8", "build>=1.0"]
+
+[project.scripts]
+bibaifilter = "bibaifilter.cli:main"
+
+[project.urls]
+Repository = "https://github.com/bcankara/BibAIFilter"
+Archive = "https://doi.org/10.5281/zenodo.15235413"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bibaifilter = ["_web/**/*", "_web/**/.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

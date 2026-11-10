@@ -1,0 +1,18 @@
+{
+  "name": "genai-secondary-education_screening",
+  "input": "sample_records.csv",
+  "mapping": {"label": "included"},
+  "task": "eligibility",
+  "preset": "eligibility-v2",
+  "topic": "Generative AI in school education",
+  "criteria": "Population: primary or secondary school students or teachers\nIntervention or exposure: generative AI or large language model tools used for teaching or learning\nDesign: empirical study (experimental, quasi-experimental, survey or qualitative)\nExclude: reviews, editorials, studies in higher education only, studies not about education",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "settings": {"temperature": 0, "reasoning": "none", "structured": true},
+  "repetitions": 3,
+  "shuffle": true,
+  "seed": 20261110,
+  "concurrency": 2,
+  "max_cost_usd": 1.0,
+  "output_dir": "results"
+}

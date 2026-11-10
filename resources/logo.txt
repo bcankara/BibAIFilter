@@ -1,7 +1,0 @@
-Bu dosya, gerçek bir logo dosyasının (logo.png) yerini tutmak için oluşturulmuştur.
-Gerçek bir logo kullanmak isterseniz, resources/ klasörü içine logo.png adında bir dosya koyabilirsiniz.
-Bu dosya 48x48 piksel boyutunda olursa ideal olacaktır.
-
-Not: resources/logo.png dosyasının bulunmaması durumunda, program otomatik olarak
-yeşil renkli bir belge simgesi (📑) gösterecektir. Bu simge ile program ikonu (icon.webp)
-ayrı olacak şekilde tasarlanmıştır. 
