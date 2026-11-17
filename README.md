@@ -4,6 +4,7 @@
   **LLM-assisted relevance scoring and eligibility screening of bibliographic records — with a full audit trail**
 
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+  [![PyPI](https://img.shields.io/pypi/v/bibaifilter.svg)](https://pypi.org/project/bibaifilter/)
   [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
   [![Version](https://img.shields.io/badge/version-1.0.0-0c2847.svg)](CHANGELOG.md)
 </div>
@@ -23,7 +24,7 @@ BibAIFilter supports human screening; it does not replace it.
 You need **Python 3.10 or newer**. Node.js is not needed.
 
 ```bash
-pip install "git+https://github.com/bcankara/BibAIFilter.git"
+pip install bibaifilter
 bibaifilter
 ```
 
@@ -31,7 +32,7 @@ The browser opens at `http://127.0.0.1:8765/`. Stop the server with `Ctrl+C`.
 
 - **macOS / Linux:** use `python3 -m pip …` if `pip` is not found.
 - **Windows:** if `bibaifilter` is not recognised after installing, run `python -m bibaifilter`, or install
-  with [pipx](https://pipx.pypa.io) (`pipx install "git+https://github.com/bcankara/BibAIFilter.git"`),
+  with [pipx](https://pipx.pypa.io) (`pipx install bibaifilter`),
   which puts the command on your PATH.
 - **Docker:** `docker compose up` (see [docker-compose.yml](docker-compose.yml)); then open `http://127.0.0.1:8765/`.
 - Optional: `pip install keyring` to store API keys in the operating-system keychain.
