@@ -87,7 +87,7 @@ export default function Home() {
       )}
       <div className="mt-5">
         <Note>
-          BibAIFilter 2 never substitutes a default score: a failed, truncated or unparsable answer stays empty and is
+          BibAIFilter never substitutes a default score: a failed, truncated or unparsable answer stays empty and is
           counted. The model is never switched behind your back — if the provider answers with a different model
           name, the call is flagged.
         </Note>
