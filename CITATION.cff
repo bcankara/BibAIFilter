@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use BibAIFilter, please cite it as below."
+title: "BibAIFilter: LLM-assisted relevance scoring and eligibility screening of bibliographic records"
+version: 1.0.0
+date-released: 2026-11-10
+license: GPL-3.0-or-later
+repository-code: "https://github.com/bcankara/BibAIFilter"
+authors:
+  - family-names: Kara
+    given-names: Burak Can
+  - family-names: Şahin
+    given-names: Alperen
+keywords:
+  - systematic review
+  - screening
+  - large language models
+  - bibliometrics

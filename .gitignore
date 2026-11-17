@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Web interface sources (the built copy in src/bibaifilter/_web IS committed,
+# so that `pip install git+...` works without Node.js)
+web/node_modules/
+web/.next/
+web/out/
+
+# IDE & tools
+.idea/
+.vscode/
+.cursor/
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local data and secrets — never commit
+bibaifilter-data/
+secrets.json
+.env
+.env.*
+*.log
