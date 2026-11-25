@@ -10,7 +10,7 @@
 </div>
 
 BibAIFilter sends each record of your literature export (title, abstract, keywords) to a large language
-model and asks either **how relevant it is to your topic (1–7)** or **whether it meets your eligibility
+model and asks **how relevant it is to your topic (1–7)**, **how likely it is to meet your eligibility criteria (1–7)** or **whether it meets your eligibility
 criteria (include / exclude / uncertain)**. It runs on your own computer, opens in your browser, works
 with OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter and local open-weight models (Ollama), and
 records every call so that a run can be checked, reported and repeated.
