@@ -97,6 +97,8 @@ export default function NewRun() {
     setMaxTokens("");
   }, [modelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const needsCriteria = task === "eligibility" || template.includes("{CRITERIA}");
+
   const choosePreset = (id: string) => {
     const p = presets.find((x) => x.id === id);
     if (!p) return;
@@ -136,7 +138,7 @@ export default function NewRun() {
     output_dir: outputDir || null,
   });
 
-  const ready = !!ds && !!topic.trim() && !!modelId && !!name.trim() && (task === "score" || !!criteria.trim());
+  const ready = !!ds && !!topic.trim() && !!modelId && !!name.trim() && (!needsCriteria || !!criteria.trim());
 
   const payloadKey = JSON.stringify(payload());
   useEffect(() => {
@@ -227,7 +229,7 @@ export default function NewRun() {
           )}
         </Step>
 
-        <Step n={2} title="Task and prompt" done={!!topic.trim() && (task === "score" || !!criteria.trim())}>
+        <Step n={2} title="Task and prompt" done={!!topic.trim() && (!needsCriteria || !!criteria.trim())}>
           <div className="grid gap-3 md:grid-cols-3">
             {presets.map((p) => (
               <button key={p.id} type="button" onClick={() => choosePreset(p.id)}
@@ -243,12 +245,13 @@ export default function NewRun() {
               <textarea className={inputCls} rows={3} value={topic} onChange={(e) => setTopic(e.target.value)}
                 placeholder="e.g. Generative AI feedback and L2 writing self-efficacy in secondary education" />
             </Field>
-            {task === "eligibility" ? (
-              <Field label="Eligibility criteria" hint="Inserted for {CRITERIA}. One criterion per line works best.">
+            {needsCriteria && (
+              <Field label="Eligibility criteria" hint="Inserted for {CRITERIA}. One criterion per line works best. Required when the task is eligibility screening or the prompt template contains {CRITERIA}.">
                 <textarea className={inputCls} rows={5} value={criteria} onChange={(e) => setCriteria(e.target.value)}
                   placeholder={"Population: secondary-school students\nIntervention: generative-AI feedback on writing\nDesign: empirical (experimental or quasi-experimental)\nExclude: reviews, editorials, conference abstracts"} />
               </Field>
-            ) : (
+            )}
+            {task === "score" && (
               <Field label="Relevance threshold" hint="A record counts as relevant when its mean score is at or above this value (used for recall/precision).">
                 <input type="number" min={1} max={7} className={inputCls} value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} />
               </Field>
@@ -376,7 +379,7 @@ export default function NewRun() {
           <div className="mt-4 flex justify-end">
             <Button variant="accent" onClick={start} loading={starting} disabled={!ready}><PlayCircle className="h-4 w-4" />Start run</Button>
           </div>
-          {!ready && ds && <p className="mt-2 text-right text-[12px] text-muted">To start: {[!topic.trim() && "a topic", task === "eligibility" && !criteria.trim() && "criteria", !modelId && "a model", !name.trim() && "a run name"].filter(Boolean).join(", ")}.</p>}
+          {!ready && ds && <p className="mt-2 text-right text-[12px] text-muted">To start: {[!topic.trim() && "a topic", needsCriteria && !criteria.trim() && "criteria", !modelId && "a model", !name.trim() && "a run name"].filter(Boolean).join(", ")}.</p>}
           <div className="mt-4"><Note>
             Titles, abstracts and keywords are sent to {prov?.label || "the provider"}. Check that the provider's terms and the
             licence of your database allow this, especially for unpublished records. Ollama keeps everything on this computer.

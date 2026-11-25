@@ -1,4 +1,4 @@
-# BibAIFilter 2 — container image (interface + API on port 8765).
+# BibAIFilter — container image (interface + API on port 8765).
 # The web interface is pre-built in src/bibaifilter/_web, so Node.js is not needed here.
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \

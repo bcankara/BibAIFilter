@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1 — 2026-11-26
+
+- New prompt preset "Eligibility score 1–7 (criteria)": ranks records by how likely they meet the eligibility criteria (score task); recommended for ordering records before screening.
+- The "Eligibility criteria" field is shown whenever the prompt template uses `{CRITERIA}`, not only for the include / exclude / uncertain task.
+- A run whose template uses `{CRITERIA}` with empty criteria is rejected with a clear message (web interface API and `bibaifilter run`).
+- Wording cleanup in code comments and documentation.
+
 ## 1.0.0 — 2026-11
 
 First release.

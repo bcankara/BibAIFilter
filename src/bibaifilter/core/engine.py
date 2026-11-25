@@ -1,6 +1,6 @@
 """The run engine: records x repetitions -> provider calls -> parsed, logged results.
 
-Rules (each answers a defect of version 1):
+Rules:
 
 * No silent defaults: a failed or unparsable call has no score and a status.
 * No model substitution: the requested model is always the one called; the

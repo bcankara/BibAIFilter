@@ -409,6 +409,8 @@ async def create_run(body: RunIn):
         raise HTTPException(400, "task must be 'score' or 'eligibility'")
     if body.task == "eligibility" and not body.criteria.strip():
         raise HTTPException(400, "eligibility screening needs criteria")
+    if "{CRITERIA}" in body.template and not body.criteria.strip():
+        raise HTTPException(400, "the prompt template uses {CRITERIA}, so eligibility criteria must be entered")
     if body.provider not in PROVIDER_INFO:
         raise HTTPException(400, "unknown provider")
     key, _ = keys.get_key(body.provider)

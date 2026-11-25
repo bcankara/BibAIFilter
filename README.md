@@ -6,7 +6,7 @@
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
   [![PyPI](https://img.shields.io/pypi/v/bibaifilter.svg)](https://pypi.org/project/bibaifilter/)
   [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-  [![Version](https://img.shields.io/badge/version-1.0.0-0c2847.svg)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-1.0.1-0c2847.svg)](CHANGELOG.md)
 </div>
 
 BibAIFilter sends each record of your literature export (title, abstract, keywords) to a large language

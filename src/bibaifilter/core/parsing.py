@@ -1,7 +1,7 @@
 """Turning a model response into a score or decision — without silent defaults.
 
-Version 1 returned a default score of 4 when a response was empty or could not
-be parsed, took the first integer anywhere in the text and mapped phrases such
+Some tools return a default score (for example 4) when a response is empty or
+cannot be parsed, take the first integer anywhere in the text, or map phrases such
 as "very relevant" to numbers. None of that happens here. Every parse returns a
 ``status``; only ``ok`` and ``extracted`` carry a value, every other status
 leaves the value empty (``None``) and is counted and exported.

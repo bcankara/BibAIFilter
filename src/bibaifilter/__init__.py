@@ -4,5 +4,5 @@ Browser-based, pip-installable tool for LLM-assisted relevance scoring and eligi
 bibliographic records, with call-level audit logs.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __codename__ = ""

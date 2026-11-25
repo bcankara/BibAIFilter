@@ -1,6 +1,6 @@
 import type { Config } from "tailwindcss";
 
-// BibAIFilter 2 palette — same family as BibexPy v2 (navy primary, matte statuses),
+// BibAIFilter palette (navy primary, matte statuses),
 // with the blue and yellow of the BibAIFilter funnel logo as accents.
 const navy = {
   50: "#f4f7fa", 100: "#e7edf4", 200: "#c9d6e5", 300: "#a2b8d0", 400: "#7593b5",

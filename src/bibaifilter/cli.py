@@ -108,6 +108,9 @@ def cmd_run(args) -> int:
         concurrency=spec.get("concurrency", 2), max_cost_usd=spec.get("max_cost_usd"),
         input_file=path.name, input_sha256=file_sha256(path),
     )
+    if (cfg.task == "eligibility" or "{CRITERIA}" in cfg.template) and not cfg.criteria.strip():
+        print('The run spec needs non-empty "criteria": the task or the prompt template uses eligibility criteria.', file=sys.stderr)
+        return 2
     catalog.apply_defaults(catalog.get(cfg.provider, cfg.model), cfg.settings)
     if args.dry_run:
         from .core.prompts import fill
